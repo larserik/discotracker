@@ -48,6 +48,20 @@ location / {
 }
 ```
 
+### Canonical host (www → naked domain)
+
+Set `CANONICAL_HOST` in `.env` and the app itself redirects every other hostname to it with a
+`301` (so it works behind the shared nginx without any special config there):
+
+```sh
+CANONICAL_HOST=https://discotracker.com   # www.discotracker.com/x -> https://discotracker.com/x
+CANONICAL_HOST=discotracker.com           # same, but keeps http/https as requested
+```
+
+The `https://` form also redirects plain http to https, but only when the proxy sends
+`X-Forwarded-Proto` (otherwise it could loop). Access by IP or `localhost` and `/healthz` are
+never redirected, and the start page gets a matching `<link rel="canonical">`.
+
 Data (SQLite: users, sessions, login codes, saved songs) lives in the `discotracker-data` volume.
 
 ## Development
