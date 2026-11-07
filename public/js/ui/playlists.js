@@ -250,7 +250,7 @@ function initPlayer(app) {
   // editor behind the player. The user's own song is stashed meanwhile.
   const engine = app.engine;
   let stash = null; // the user's own song while listening: { song, serverSong, draftId, dirty, state, undo, redo, mutes }
-  let keepOnClose = false; // closing after "Edit" hands the playing song to the editor
+  let edited = null; // the track the user is editing a copy of: { token, index, draftId }
   let token = null;
   let playlist = null;
   let index = -1;
@@ -258,7 +258,12 @@ function initPlayer(app) {
   let loadSeq = 0;
   const cache = new Map(); // songId -> { name, format, data }
 
+  // Is the editor (still) holding the user's copy of track i from this playlist?
+  const editingCopyOf = (i) => !stash && !!edited && edited.token === token && edited.index === i && app.draftId === edited.draftId;
+  const copyPlaying = () => editingCopyOf(index) && engine.playing;
+
   engine.addEventListener('ended', () => { if (playing && stash) next(1); });
+  engine.addEventListener('stopped', () => { if (dialog.open && !stash) render(); });
   engine.addEventListener('row', (e) => {
     if (!stash || !playing) return;
     const m = e.detail;
@@ -281,15 +286,22 @@ function initPlayer(app) {
     if (playlist && !playlist.tracks.length) list.append(el('li', { className: 'empty', textContent: 'This playlist is empty.' }));
     (playlist?.tracks || []).forEach((t, i) => {
       const li = el('li', { className: i === index ? 'current' : '', onclick: (e) => { if (!e.target.closest('button')) play(i); } },
-        el('span', { className: 't-name', textContent: (i === index && playing ? '♪ ' : '') + t.name }),
+        el('span', { className: 't-name', textContent: (i === index && (playing || copyPlaying()) ? '♪ ' : '') + t.name }),
+        editingCopyOf(i) ? el('span', { className: 'badge', textContent: playlist.access === 'owner' ? 'open in editor' : 'your copy' }) : '',
         el('span', { className: 't-fmt', textContent: t.format.toUpperCase() }),
-        el('button', { textContent: '✎ Edit', title: playlist.access === 'owner' ? 'Edit this song' : 'Edit your own copy of this song', onclick: () => editTrack(i) }),
+        el('button', { textContent: editingCopyOf(i) ? '✎ Continue' : '✎ Edit', title: editingCopyOf(i) ? 'Back to editing' : playlist.access === 'owner' ? 'Edit this song' : 'Edit your own copy of this song', onclick: () => editTrack(i) }),
         el('button', { textContent: '⤓', title: 'Download', onclick: () => download(i) }));
       list.append(li);
     });
-    $('#pp-play').textContent = playing ? '■' : '▶';
+    $('#pp-play').textContent = playing || copyPlaying() ? '■' : '▶';
     $('#pp-play').disabled = !playlist?.tracks.length;
     $('#pp-edit').disabled = index < 0;
+    $('#pp-edit').textContent = editingCopyOf(index) ? '✎ Continue editing' : '✎ Edit this song';
+    if (editingCopyOf(index) && !playing) {
+      const t = playlist.tracks[index];
+      const what = playlist.access === 'owner' ? `"${t.name}"` : `Your copy of "${t.name}"`;
+      $('#pp-now').textContent = `${what} is ${engine.playing ? 'playing' : 'open'} in the editor`;
+    }
   }
 
   async function fetchSong(i) {
@@ -312,6 +324,7 @@ function initPlayer(app) {
       if (seq !== loadSeq) return;
       const song = loadSongFile(s.data.slice(0), `${s.name}.${s.format}`);
       await enterListening();
+      render(); // now listening: the track is the original, not the user's copy
       app.setSong(song);
       app.state.follow = true;
       await app.play('song');
@@ -364,6 +377,13 @@ function initPlayer(app) {
    * in My songs (on this device) if it had changes.
    */
   async function editTrack(i) {
+    // Already editing a copy of this track (e.g. came back with the Back button):
+    // just return to it – don't stop the music or load the original again.
+    if (editingCopyOf(i)) {
+      dialog.close();
+      $('#pattern').focus();
+      return;
+    }
     try {
       const s = await fetchSong(i);
       index = i; // highlighted when the user comes back to the playlist
@@ -377,8 +397,7 @@ function initPlayer(app) {
         document.body.classList.remove('listening');
       }
       if (handOver) {
-        keepOnClose = true;
-        dialog.close();
+        dialog.close(); // not listening any more, so closing leaves the music running
         app.serverSong = serverSong;
         app.draftId = null;
         app.dirty = false;
@@ -388,6 +407,7 @@ function initPlayer(app) {
         const song = loadSongFile(s.data.slice(0), `${s.name}.${s.format}`);
         await app.switchSong(song, { serverSong, edited: true });
       }
+      edited = { token, index: i, draftId: app.draftId };
       if (prev && prev.dirty && prev.draftId) app.toast(`"${prev.song.title || 'untitled'}" is kept in My songs (on this device).`);
       app.toast((own
         ? `You're editing "${s.name}". Save it from My songs to update it in your account.`
@@ -434,20 +454,20 @@ function initPlayer(app) {
     }
   }
 
-  $('#pp-play').addEventListener('click', () => (playing ? stop() : play(index < 0 ? 0 : index)));
+  $('#pp-play').addEventListener('click', () => (playing || copyPlaying() ? stop() : play(index < 0 ? 0 : index)));
   $('#pp-prev').addEventListener('click', () => next(-1));
   $('#pp-next').addEventListener('click', () => next(1));
   $('#pp-edit').addEventListener('click', () => { if (index >= 0) editTrack(index); });
   $('#pp-signin').addEventListener('click', () => { dialog.close(); app.auth.open(); });
   dialog.addEventListener('close', () => {
-    if (keepOnClose) {
-      // Handed over to the editor while playing: leave the music running.
-      keepOnClose = false;
-      loadSeq++;
-      playing = false;
-    } else {
+    if (stash) {
+      // Listening to the playlist: stop and give the user's own song back.
       stop();
       leaveListening();
+    } else {
+      // Music in the editor (e.g. the user's copy) wasn't started by the player: leave it.
+      loadSeq++;
+      playing = false;
     }
     // Leaving the playlist is a new history entry, so Back returns to it.
     if (closingFromHistory) closingFromHistory = false;
