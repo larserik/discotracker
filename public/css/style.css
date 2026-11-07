@@ -342,6 +342,9 @@ body.editing .pattern-panel { box-shadow: inset 0 0 0 2px var(--danger); }
 #player-dialog h2 { margin-bottom: 2px; }
 #player-dialog .pp-controls { margin: 6px 0 8px; }
 
+.playlist-chip { border-color: var(--accent); color: var(--accent); max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.playlist-chip:hover { background: var(--accent); color: #fff; }
+
 /* toasts & drop */
 .toasts { position: fixed; bottom: 36px; right: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 50; max-width: min(380px, calc(100vw - 32px)); }
 .toast {

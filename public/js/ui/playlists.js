@@ -1,6 +1,7 @@
 // Playlists: manage (owner), share by link/email, and listen (anyone allowed).
 import { api } from '../api.js';
 import { loadSongFile } from '../formats/index.js';
+import { local } from '../storage.js';
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, props = {}, ...children) => {
@@ -9,6 +10,22 @@ const el = (tag, props = {}, ...children) => {
   return e;
 };
 const fmtDate = (ms) => new Date(ms).toLocaleDateString(undefined, { dateStyle: 'medium' });
+
+// Playlists opened in this browser, so a shared link can be found again.
+const RECENT_KEY = 'dt.recentPlaylists';
+const recent = {
+  list() {
+    try { return JSON.parse(local.get(RECENT_KEY)) || []; } catch { return []; }
+  },
+  add(p) {
+    const list = recent.list().filter((x) => x.token !== p.token);
+    list.unshift({ token: p.token, name: p.name, tracks: p.tracks.length, openedAt: Date.now() });
+    local.set(RECENT_KEY, JSON.stringify(list.slice(0, 30)));
+  },
+  remove(token) {
+    local.set(RECENT_KEY, JSON.stringify(recent.list().filter((x) => x.token !== token)));
+  },
+};
 
 export function initPlaylists(app) {
   const player = initPlayer(app);
@@ -41,8 +58,35 @@ function initManager(app, playerOpen) {
     refreshList();
   }
 
+  function renderRecent(hide = new Set()) {
+    const box = $('#pl-recent');
+    box.replaceChildren();
+    const list = recent.list().filter((p) => !hide.has(p.token));
+    $('#pl-recent-h').hidden = !list.length && !!app.user;
+    if (!list.length) {
+      if (!app.user) box.append(el('p', { className: 'muted', textContent: 'Playlists you open from a link show up here.' }));
+      return;
+    }
+    const tb = el('tbody');
+    for (const p of list) {
+      tb.append(el('tr', {},
+        el('td', { className: 'name', textContent: p.name }),
+        el('td', { textContent: `${p.tracks} song${p.tracks === 1 ? '' : 's'}` }),
+        el('td', { textContent: `opened ${fmtDate(p.openedAt)}` }),
+        el('td', { className: 'acts' },
+          el('button', { textContent: '▶ Play', onclick: () => { dialog.close(); playerOpen(p.token); } }), ' ',
+          el('button', { textContent: '✕', title: 'Remove from this list', onclick: () => { recent.remove(p.token); renderRecent(hide); } }))));
+    }
+    box.append(el('table', { className: 'songs-table' }, tb));
+  }
+
   const refreshList = guard(async () => {
+    $('#pl-signed-out').hidden = !!app.user;
+    $('#pl-signed-in').hidden = !app.user;
+    if (!app.user) { renderRecent(); return; }
     const { mine, shared } = await api.listPlaylists();
+    // Playlists already listed above don't need to appear under "recently opened".
+    renderRecent(new Set([...mine, ...shared].map((p) => p.token)));
     const mineBox = $('#pl-mine');
     mineBox.replaceChildren();
     if (!mine.length) mineBox.append(el('p', { className: 'muted', textContent: 'No playlists yet.' }));
@@ -135,6 +179,9 @@ function initManager(app, playerOpen) {
     setTracks(ids);
   };
 
+  $('#pl-signin').addEventListener('click', () => { dialog.close(); app.auth.open(); });
+  // Signing in/out changes what the list shows.
+  app.onUserChange.push(() => { if (dialog.open && !current) refreshList(); });
   $('#pl-new').addEventListener('click', guard(async () => {
     const p = await api.createPlaylist({ name: 'New playlist' });
     await edit(p.id);
@@ -187,7 +234,6 @@ function initManager(app, playerOpen) {
 
   return {
     open() {
-      if (!app.user) { app.auth.open(); return; }
       setError();
       dialog.showModal();
       showList();
@@ -320,6 +366,7 @@ function initPlayer(app) {
   async function editTrack(i) {
     try {
       const s = await fetchSong(i);
+      index = i; // highlighted when the user comes back to the playlist
       const own = playlist.access === 'owner';
       const serverSong = own ? { id: playlist.tracks[i].id, name: s.name } : null;
       const prev = stash;
@@ -368,9 +415,12 @@ function initPlayer(app) {
     $('#pp-body').hidden = false;
     try {
       playlist = await api.openShared(token);
-      index = -1;
+      if (index >= playlist.tracks.length) index = -1; // keep the place when coming back
+      recent.add(playlist);
+      showChip();
       render();
     } catch (e) {
+      if (e.status === 404) { recent.remove(token); hideChip(); }
       playlist = null;
       render();
       $('#pp-title').textContent = 'Playlist';
@@ -403,12 +453,22 @@ function initPlayer(app) {
   app.onUserChange.push(() => { if (token && !playlist && !dialog.open) open(token); });
 
   async function open(t) {
-    if (token !== t) cache.clear();
+    if (token !== t) { cache.clear(); index = -1; }
     token = t;
     if (location.pathname !== `/p/${t}`) history.replaceState(null, '', `/p/${t}`);
     if (!dialog.open) dialog.showModal();
     await load();
   }
+
+  // "♫ <playlist>" in the top bar: one click back to the playlist, e.g. after "Edit".
+  const chip = $('#playlist-chip');
+  function showChip() {
+    chip.querySelector('span').textContent = playlist.name;
+    chip.title = `Back to the playlist "${playlist.name}"`;
+    chip.hidden = false;
+  }
+  function hideChip() { chip.hidden = true; }
+  chip.addEventListener('click', () => { if (token) open(token); });
 
   return { open };
 }

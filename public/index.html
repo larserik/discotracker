@@ -26,7 +26,7 @@
         </div>
       </div>
       <button data-action="my-songs" title="Songs you are working on, and songs saved in your account">My songs</button>
-      <button data-action="playlists" class="needs-user">Playlists</button>
+      <button data-action="playlists" title="Your playlists and playlists you have opened">Playlists</button>
       <button data-action="demo" title="Load the demo song">Demo</button>
       <button data-action="help" title="Keyboard help">Help</button>
     </nav>
@@ -36,6 +36,7 @@
       <button data-action="play-pattern" title="Play pattern (Shift+Enter)">▶ Pattern</button>
       <button data-action="stop" title="Stop (Esc)">■ Stop</button>
       <button data-action="toggle-edit" id="edit-btn" title="Edit / record mode (Space)">● Edit</button>
+      <button id="playlist-chip" class="playlist-chip" hidden title="Back to the playlist">♫ <span></span></button>
     </div>
 
     <div class="account" id="account">
@@ -166,10 +167,19 @@
     <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
     <section id="pl-list-view">
       <h2>Playlists</h2>
-      <div class="songs-actions"><button class="primary" id="pl-new">New playlist</button></div>
-      <div id="pl-mine"></div>
-      <h3 class="pl-sub">Shared with me</h3>
-      <div id="pl-shared"></div>
+      <div id="pl-signed-out" hidden>
+        <p class="muted">Sign in to make your own playlists and share them by link or email.</p>
+        <button class="primary" id="pl-signin">Sign in</button>
+      </div>
+      <div id="pl-signed-in">
+        <div class="songs-actions"><button class="primary" id="pl-new">New playlist</button></div>
+        <h3 class="pl-sub">My playlists</h3>
+        <div id="pl-mine"></div>
+        <h3 class="pl-sub">Shared with me</h3>
+        <div id="pl-shared"></div>
+      </div>
+      <h3 class="pl-sub" id="pl-recent-h">Recently opened on this device</h3>
+      <div id="pl-recent"></div>
     </section>
     <section id="pl-edit-view" hidden>
       <button class="link" id="pl-back">← All playlists</button>
