@@ -41,10 +41,17 @@
 
     <div class="account" id="account">
       <button id="signin-btn" class="primary">Sign in</button>
-      <span id="user-box" hidden>
-        <span id="user-email" class="user-email"></span>
-        <button id="logout-btn">Log out</button>
-      </span>
+      <div class="dropdown" id="user-box" hidden>
+        <button class="dropdown-toggle account-btn" id="account-btn" aria-haspopup="true" aria-label="Account menu">
+          <svg class="user-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+          <span id="user-email" class="user-email"></span>
+          <span class="caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="dropdown-menu dropdown-right" role="menu">
+          <div class="menu-header">Signed in as<strong id="menu-email"></strong></div>
+          <button id="logout-btn" role="menuitem">Sign out</button>
+        </div>
+      </div>
     </div>
   </header>
 

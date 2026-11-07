@@ -22,8 +22,25 @@ export function initAuth({ onUser, toast }) {
     $('#signin-btn').hidden = !!user;
     $('#user-box').hidden = !user;
     $('#user-email').textContent = user?.email || '';
+    $('#menu-email').textContent = user?.email || '';
+    $('#account-btn').title = user ? `Signed in as ${user.email}` : '';
+    fitAccount();
     onUser(user);
   }
+
+  // Show the email next to the icon only if the top bar fits on one line.
+  const account = $('#account');
+  function fitAccount() {
+    account.classList.remove('compact');
+    if ($('#user-box').hidden) return;
+    const first = document.querySelector('.topbar > *');
+    // Wrapped onto a new line = starts below the first item in the bar.
+    if (account.offsetTop >= first.offsetTop + first.offsetHeight) account.classList.add('compact');
+  }
+  window.addEventListener('resize', fitAccount);
+  // The menu and transport change width e.g. when the ♫ playlist button appears.
+  const ro = new ResizeObserver(() => requestAnimationFrame(fitAccount));
+  document.querySelectorAll('.topbar .menu, .topbar .transport').forEach((e) => ro.observe(e));
 
   function showEmailStep() {
     codeForm.hidden = true;
@@ -118,6 +135,7 @@ export function initAuth({ onUser, toast }) {
 
   $('#signin-btn').addEventListener('click', () => open());
   $('#logout-btn').addEventListener('click', async () => {
+    $('#user-box').classList.remove('open');
     try { await api.logout(); } catch { /* ignore */ }
     showUser(null);
     toast('Signed out');
