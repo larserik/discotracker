@@ -203,7 +203,8 @@ function initPlayer(app) {
   // Playback goes through the main tracker so the song scrolls in the pattern
   // editor behind the player. The user's own song is stashed meanwhile.
   const engine = app.engine;
-  let stash = null; // { song, serverSong, state, undo, redo }
+  let stash = null; // the user's own song while listening: { song, serverSong, draftId, dirty, state, undo, redo, mutes }
+  let keepOnClose = false; // closing after "Edit" hands the playing song to the editor
   let token = null;
   let playlist = null;
   let index = -1;
@@ -236,12 +237,13 @@ function initPlayer(app) {
       const li = el('li', { className: i === index ? 'current' : '', onclick: (e) => { if (!e.target.closest('button')) play(i); } },
         el('span', { className: 't-name', textContent: (i === index && playing ? '♪ ' : '') + t.name }),
         el('span', { className: 't-fmt', textContent: t.format.toUpperCase() }),
-        el('button', { textContent: 'Open in editor', title: 'Load into the tracker to look at or remix it', onclick: () => openInEditor(i) }),
+        el('button', { textContent: '✎ Edit', title: playlist.access === 'owner' ? 'Edit this song' : 'Edit your own copy of this song', onclick: () => editTrack(i) }),
         el('button', { textContent: '⤓', title: 'Download', onclick: () => download(i) }));
       list.append(li);
     });
     $('#pp-play').textContent = playing ? '■' : '▶';
     $('#pp-play').disabled = !playlist?.tracks.length;
+    $('#pp-edit').disabled = index < 0;
   }
 
   async function fetchSong(i) {
@@ -289,7 +291,7 @@ function initPlayer(app) {
     // Save the user's work first so a pending autosave can't store the playlist song instead.
     await app.flushAutosave();
     stash = {
-      song: app.song, serverSong: app.serverSong, undo: app.undo, redo: app.redo,
+      song: app.song, serverSong: app.serverSong, draftId: app.draftId, dirty: app.dirty, undo: app.undo, redo: app.redo,
       state: { ...app.state, selection: null }, mutes: app.mutes.slice(),
     };
     app.listening = true;
@@ -303,27 +305,47 @@ function initPlayer(app) {
     stash = null;
     app.listening = false;
     document.body.classList.remove('listening');
-    app.setSong(s.song, { serverSong: s.serverSong });
+    app.setSong(s.song, { serverSong: s.serverSong, draftId: s.draftId, dirty: s.dirty });
     Object.assign(app.state, s.state, { followActive: false });
     app.undo = s.undo; app.redo = s.redo;
     s.mutes.forEach((m, i) => { if (m) app.toggleMute(i); });
     app.refreshAll();
   }
 
-  async function openInEditor(i) {
+  /**
+   * Start editing a track. It always becomes the user's own work: the owner edits
+   * their song, anyone else gets a copy. Whatever was in the editor before is kept
+   * in My songs (on this device) if it had changes.
+   */
+  async function editTrack(i) {
     try {
       const s = await fetchSong(i);
-      const song = loadSongFile(s.data.slice(0), `${s.name}.${s.format}`);
-      stop();
-      stash = null; // the opened song replaces the user's song (it was autosaved)
-      app.listening = false;
-      document.body.classList.remove('listening');
-      dialog.close();
-      // Owner: saving updates their song. Others: saving creates their own copy.
       const own = playlist.access === 'owner';
-      app.setSong(song, { serverSong: own ? { id: playlist.tracks[i].id, name: s.name } : null });
-      app.changed();
-      app.toast(own ? `Opened "${s.name}"` : `Opened "${s.name}" – saving stores a copy in your My songs`);
+      const serverSong = own ? { id: playlist.tracks[i].id, name: s.name } : null;
+      const prev = stash;
+      const handOver = stash && playing && index === i; // already playing in the editor: keep it going
+      if (stash) {
+        stash = null;
+        app.listening = false;
+        document.body.classList.remove('listening');
+      }
+      if (handOver) {
+        keepOnClose = true;
+        dialog.close();
+        app.serverSong = serverSong;
+        app.draftId = null;
+        app.dirty = false;
+        app.changed(); // now the user's own work in progress
+      } else {
+        dialog.close();
+        const song = loadSongFile(s.data.slice(0), `${s.name}.${s.format}`);
+        await app.switchSong(song, { serverSong, edited: true });
+      }
+      if (prev && prev.dirty && prev.draftId) app.toast(`"${prev.song.title || 'untitled'}" is kept in My songs (on this device).`);
+      app.toast(own
+        ? `You're editing "${s.name}". Save it from My songs to update it in your account.`
+        : `You're editing your own copy of "${s.name}". It's kept in My songs${app.user ? ' – save it to your account any time.' : ' on this device.'}`);
+      $('#pattern').focus();
     } catch (e) {
       app.toast(e.message, 'error');
     }
@@ -363,10 +385,18 @@ function initPlayer(app) {
   $('#pp-play').addEventListener('click', () => (playing ? stop() : play(index < 0 ? 0 : index)));
   $('#pp-prev').addEventListener('click', () => next(-1));
   $('#pp-next').addEventListener('click', () => next(1));
+  $('#pp-edit').addEventListener('click', () => { if (index >= 0) editTrack(index); });
   $('#pp-signin').addEventListener('click', () => { dialog.close(); app.auth.open(); });
   dialog.addEventListener('close', () => {
-    stop();
-    leaveListening();
+    if (keepOnClose) {
+      // Handed over to the editor while playing: leave the music running.
+      keepOnClose = false;
+      loadSeq++;
+      playing = false;
+    } else {
+      stop();
+      leaveListening();
+    }
     if (location.pathname.startsWith('/p/')) history.replaceState(null, '', '/');
   });
   // After signing in from the gate, reopen the playlist.

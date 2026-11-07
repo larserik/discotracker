@@ -11,7 +11,7 @@ import { PatternEditor } from './ui/pattern-editor.js';
 import { initAuth } from './ui/auth.js';
 import { initSongsDialog } from './ui/songs-dialog.js';
 import { initPlaylists } from './ui/playlists.js';
-import { idbGet, idbSet, local } from './storage.js';
+import { idbGet, idbSet, local, newDraftId, putDraft, deleteDraft } from './storage.js';
 import { api } from './api.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -60,6 +60,8 @@ class App {
     this.clipboard = null;
     this.held = new Map(); // key code -> channel (jamming)
     this.serverSong = null; // { id, name } when the song came from / was saved to My songs
+    this.draftId = null; // id of this song in "My songs → On this device" once it has been changed
+    this.dirty = false; // changed since it was last saved to the account / loaded
     this.user = null;
     this.onUserChange = []; // callbacks(user)
     this.saveTimer = null;
@@ -87,8 +89,7 @@ class App {
         const song = loadSongFile(saved.data.buffer ?? saved.data, 'autosave.xm');
         if (saved.format === 'mod') { song.format = 'mod'; song.linear = false; }
         if (saved.channelPan) song.channelPan = saved.channelPan;
-        this.setSong(song, { keepServer: false });
-        this.serverSong = saved.serverSong || null;
+        this.setSong(song, { serverSong: saved.serverSong || null, draftId: saved.draftId || null, dirty: !!saved.dirty });
         restored = true;
         this.status('Restored your last session.');
       } catch (e) {
@@ -108,9 +109,12 @@ class App {
   // ------------------------------------------------------------------
   // Song
 
-  setSong(song, { serverSong = null, keepServer = false } = {}) {
+  /** Low-level: show `song` in the editor. Use switchSong() for user actions. */
+  setSong(song, { serverSong = null, draftId = null, dirty = false } = {}) {
     this.song = song;
-    if (!keepServer) this.serverSong = serverSong;
+    this.serverSong = serverSong;
+    this.draftId = draftId;
+    this.dirty = dirty;
     const st = this.state;
     st.order = 0;
     st.pattern = song.orders[0] ?? 0;
@@ -135,7 +139,29 @@ class App {
     this.editor.invalidate();
   }
 
+  /**
+   * Replace the song in the editor. The current song is never lost: if it has
+   * changes it is (already) kept in "My songs → On this device".
+   * `edited`: the new song counts as the user's own work in progress right away.
+   */
+  async switchSong(song, { serverSong = null, draftId = null, dirty = false, edited = false } = {}) {
+    await this.flushAutosave();
+    const prev = this.song && this.dirty && this.draftId ? this.song.title || 'untitled' : null;
+    this.setSong(song, { serverSong, draftId, dirty });
+    if (edited) this.changed();
+    else this.scheduleAutosave();
+    if (prev) this.toast(`"${prev}" is kept in My songs (on this device).`);
+  }
+
+  /** The user changed the song. */
   changed() {
+    if (this.listening) return;
+    this.dirty = true;
+    if (!this.draftId) this.draftId = newDraftId();
+    this.scheduleAutosave();
+  }
+
+  scheduleAutosave() {
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => this.autosave(), 1500);
   }
@@ -152,7 +178,11 @@ class App {
     if (this.listening) return; // a playlist song is shown, not the user's work
     try {
       const { data } = saveSongFile(this.song, 'xm');
-      await idbSet('autosave', { data, format: this.song.format, channelPan: this.song.channelPan, serverSong: this.serverSong, savedAt: Date.now() });
+      const meta = { format: this.song.format, channelPan: this.song.channelPan, serverSong: this.serverSong };
+      await idbSet('autosave', { data, ...meta, draftId: this.draftId, dirty: this.dirty, savedAt: Date.now() });
+      if (this.dirty && this.draftId) {
+        await putDraft({ id: this.draftId, title: this.song.title || 'untitled', data, ...meta, updatedAt: Date.now() });
+      }
     } catch (e) { console.warn(e); }
   }
 
@@ -734,8 +764,7 @@ class App {
       const buf = await file.arrayBuffer();
       const song = loadSongFile(buf, file.name);
       if (!song.title || song.title === 'untitled') song.title = file.name.replace(/\.[^.]+$/, '').slice(0, 20);
-      this.setSong(song);
-      this.changed();
+      await this.switchSong(song, { edited: true });
       this.toast(`Loaded ${file.name} (${song.format.toUpperCase()}, ${song.channels} ch)`);
       this.status(`${song.title} – press Enter to play.`);
     } catch (e) {
@@ -777,7 +806,13 @@ class App {
         r = await api.saveSong({ id: null, name, format: 'xm', data });
       }
       this.serverSong = { id: r.id, name };
-      this.changed();
+      // Saved in the account: the local "unsaved work" copy is no longer needed.
+      const draft = this.draftId;
+      this.dirty = false;
+      this.draftId = null;
+      clearTimeout(this.saveTimer);
+      if (draft) await deleteDraft(draft);
+      await this.autosave();
       this.toast(`Saved "${name}" to My songs`);
       return this.serverSong;
     } catch (e) {
@@ -791,13 +826,9 @@ class App {
 
   bindUi() {
     const actions = {
-      new: () => {
-        if (!confirm('Start a new song? Unsaved changes in the current song will be lost.')) return;
-        this.setSong(newSong());
-        this.changed();
-      },
+      new: () => this.switchSong(newSong()),
       open: () => $('#file-song').click(),
-      demo: () => { this.setSong(demoSong()); this.changed(); },
+      demo: () => this.switchSong(demoSong()),
       help: () => $('#help-dialog').showModal(),
       'download-xm': () => this.download('xm'),
       'download-mod': () => this.download('mod'),
