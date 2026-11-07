@@ -41,3 +41,10 @@ export function canonicalHostMiddleware(value) {
     res.redirect(req.method === 'GET' || req.method === 'HEAD' ? 301 : 308, target);
   };
 }
+
+/** Absolute base URL for links in emails, e.g. "https://discotracker.com". */
+export function publicBaseUrl(req) {
+  const canon = parseCanonical(process.env.CANONICAL_HOST);
+  if (canon) return `${canon.protocol || 'https'}://${canon.host}`;
+  return `${req.protocol}://${req.get('host')}`;
+}

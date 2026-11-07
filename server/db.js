@@ -47,6 +47,34 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_songs_user ON songs(user_id, updated_at);
+
+  CREATE TABLE IF NOT EXISTS playlists (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token       TEXT NOT NULL UNIQUE,           -- used in the share link /p/<token>
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    visibility  TEXT NOT NULL DEFAULT 'private', -- 'private' (owner + invited emails) | 'public' (anyone with the link)
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_id, updated_at);
+
+  CREATE TABLE IF NOT EXISTS playlist_items (
+    playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+    song_id     INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+    position    INTEGER NOT NULL,
+    PRIMARY KEY (playlist_id, song_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS playlist_shares (
+    playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+    email       TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    notified_at INTEGER,
+    PRIMARY KEY (playlist_id, email)
+  );
+  CREATE INDEX IF NOT EXISTS idx_playlist_shares_email ON playlist_shares(email);
 `);
 
 export function cleanup() {

@@ -61,3 +61,15 @@ test('MOD export + import', () => {
   assert.ok(r.rms > 0.01);
   console.log('mod warnings:', warnings);
 });
+
+test('core reports the end of a song once (playlist auto-advance)', async () => {
+  const { TrackerCore } = await import('../public/js/audio/tracker-core.js');
+  const events = [];
+  const core = new TrackerCore(44100, (m) => events.push(m.type));
+  core.onMessage({ type: 'song', song: demoSong() });
+  core.onMessage({ type: 'play', mode: 'song', order: 0, row: 0 });
+  const L = new Float32Array(128), R = new Float32Array(128);
+  // demo: 4 orders x 64 rows x 0.125 s = 32 s; render 40 s
+  for (let f = 0; f < 40 * 44100; f += 128) core.process(L, R);
+  assert.equal(events.filter((t) => t === 'ended').length, 1);
+});

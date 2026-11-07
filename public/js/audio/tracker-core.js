@@ -28,7 +28,7 @@ export class TrackerCore {
         rp.channels.forEach((c, i) => { c.muted = !!mutes[i]; });
         break;
       }
-      case 'play': rp.play(m.mode, m.order, m.row, m.pattern); break;
+      case 'play': rp.play(m.mode, m.order, m.row, m.pattern); this.endedSent = false; break;
       case 'stop': rp.stop(); break;
       case 'cell': {
         const p = song?.patterns[m.pattern];
@@ -73,6 +73,11 @@ export class TrackerCore {
     for (let i = 0; i < L.length; i++) {
       L[i] = softClip(L[i]);
       if (R !== L) R[i] = softClip(R[i]);
+    }
+    if (rp.playing && rp.songEnded && !this.endedSent) {
+      // Song looped back (end of order list or a backwards jump): tell playlist players.
+      this.endedSent = true;
+      this.post({ type: 'ended' });
     }
     if (rp.rowEvent) {
       this.post({ type: 'row', ...rp.rowEvent, speed: rp.speed, bpm: rp.bpm });

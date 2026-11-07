@@ -16,6 +16,9 @@ Signing in (email + one-time code) lets you keep your songs on the server.
 - Load your own samples (WAV/MP3/OGG/FLAC/AIFF, raw 8-bit), drag & drop songs or samples
 - Work is autosaved locally (IndexedDB); signed-in users get *My songs* on the server
 - Passwordless sign-in: email → 6-digit code (pasting the code signs you in automatically)
+- Playlists of your saved songs: share by link (public) or invite specific email addresses
+  (private – they sign in with that address to listen). Listeners can play, download, or open a
+  song in the editor; saving then creates their own copy
 
 Planned: S3M, STM and IT import, envelope editor, instrument synthesis editors.
 

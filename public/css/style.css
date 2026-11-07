@@ -303,6 +303,38 @@ body.editing .pattern-panel { box-shadow: inset 0 0 0 2px var(--danger); }
 .songs-table .acts { text-align: right; white-space: nowrap; }
 .songs-list { max-height: 60vh; overflow-y: auto; }
 
+/* playlists */
+.pl-sub { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 16px 0 6px; }
+.pl-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 8px; }
+.pl-tracks { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 6px; max-height: 280px; overflow-y: auto; counter-reset: track; }
+.pl-tracks li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--border); counter-increment: track; }
+.pl-tracks li:last-child { border-bottom: 0; }
+.pl-tracks li::before { content: counter(track, decimal-leading-zero); font-family: var(--mono); color: var(--muted); font-size: 12px; }
+.pl-tracks .t-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-tracks .t-fmt { font-size: 11px; color: var(--muted); }
+.pl-tracks button { padding: 2px 7px; }
+.pl-tracks .empty { color: var(--muted); justify-content: center; }
+.pl-tracks .empty::before { content: none; }
+.pp-tracks li { cursor: pointer; }
+.pp-tracks li:hover { background: var(--pe-beat); }
+.pp-tracks li.current { background: var(--pe-cursor-row); }
+.pp-tracks li.current .t-name { font-weight: 600; }
+.pl-shares { list-style: none; padding: 0; margin: 6px 0; font-size: 13px; }
+.pl-shares li { display: flex; gap: 8px; align-items: center; padding: 3px 0; }
+.pl-shares li span { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.pl-shares .pending { color: var(--muted); font-size: 12px; }
+.pl-link input { font-family: var(--mono); font-size: 12px; }
+.pl-bottom { margin-top: 20px; }
+.badge { font-size: 11px; padding: 1px 6px; border-radius: 9px; border: 1px solid var(--border); color: var(--muted); }
+.badge.public { color: var(--accent-2); border-color: var(--accent-2); }
+.pp-controls { display: flex; align-items: center; gap: 8px; margin: 8px 0 12px; }
+.pp-controls button { font-size: 16px; padding: 4px 12px; }
+.pp-now { color: var(--muted); font-size: 13px; font-family: var(--mono); }
+.pp-desc { white-space: pre-wrap; margin: 0 0 8px; }
+.dialog textarea { width: 100%; background: var(--pe-bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font: inherit; color: inherit; resize: vertical; }
+.dialog .btnrow > input, .dialog .btnrow > select { flex: 3; }
+@media (max-width: 700px) { .pl-edit-grid { grid-template-columns: 1fr; } }
+
 /* toasts & drop */
 .toasts { position: fixed; bottom: 36px; right: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 50; max-width: min(380px, calc(100vw - 32px)); }
 .toast {

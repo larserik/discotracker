@@ -7,7 +7,7 @@
   <meta name="description" content="Make music in your browser like on the Amiga, Atari and PC – load, play and edit .MOD and .XM modules.">
   <meta name="theme-color" content="#0b0f1e">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23ff6fb5'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h14' stroke='%230b0f1e' stroke-width='3'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
   <header class="topbar">
@@ -26,6 +26,7 @@
         </div>
       </div>
       <button data-action="my-songs" class="needs-user">My songs</button>
+      <button data-action="playlists" class="needs-user">Playlists</button>
       <button data-action="demo" title="Load the demo song">Demo</button>
       <button data-action="help" title="Keyboard help">Help</button>
     </nav>
@@ -160,6 +161,76 @@
     <div id="songs-list" class="songs-list"></div>
   </dialog>
 
+  <!-- Playlists (owner) -->
+  <dialog id="playlists-dialog" class="dialog wide-dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
+    <section id="pl-list-view">
+      <h2>Playlists</h2>
+      <div class="songs-actions"><button class="primary" id="pl-new">New playlist</button></div>
+      <div id="pl-mine"></div>
+      <h3 class="pl-sub">Shared with me</h3>
+      <div id="pl-shared"></div>
+    </section>
+    <section id="pl-edit-view" hidden>
+      <button class="link" id="pl-back">← All playlists</button>
+      <div class="pl-edit-grid">
+        <div>
+          <label class="field wide">Name <input id="pl-name" maxlength="100"></label>
+          <label class="field wide">Description <textarea id="pl-desc" maxlength="1000" rows="2"></textarea></label>
+          <h3 class="pl-sub">Songs</h3>
+          <ol id="pl-tracks" class="pl-tracks"></ol>
+          <div class="btnrow">
+            <select id="pl-add-select" aria-label="Song from My songs"></select>
+            <button id="pl-add">Add</button>
+          </div>
+          <button id="pl-add-current" class="link">+ Save the song in the editor and add it</button>
+        </div>
+        <div>
+          <h3 class="pl-sub">Sharing</h3>
+          <label class="check"><input type="radio" name="pl-vis" value="private"> Private – only people you invite (they sign in with that email)</label>
+          <label class="check"><input type="radio" name="pl-vis" value="public"> Public – anyone with the link can listen</label>
+          <div class="btnrow pl-link">
+            <input id="pl-link" readonly aria-label="Share link">
+            <button id="pl-copy">Copy</button>
+          </div>
+          <button id="pl-new-link" class="link">Make a new link (the old one stops working)</button>
+          <h3 class="pl-sub">Invite by email</h3>
+          <form id="pl-share-form" class="btnrow">
+            <input id="pl-share-emails" type="text" inputmode="email" placeholder="friend@example.com, other@example.com" aria-label="Email addresses">
+            <button class="primary" type="submit">Share</button>
+          </form>
+          <ul id="pl-shares" class="pl-shares"></ul>
+          <div class="btnrow pl-bottom">
+            <button id="pl-play" class="primary">▶ Play playlist</button>
+            <button id="pl-delete" class="danger">Delete playlist</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <p class="error" id="pl-error" role="alert"></p>
+  </dialog>
+
+  <!-- Playlist player -->
+  <dialog id="player-dialog" class="dialog wide-dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
+    <h2 id="pp-title">Playlist</h2>
+    <p class="muted" id="pp-meta"></p>
+    <p id="pp-desc" class="pp-desc"></p>
+    <div id="pp-gate" hidden>
+      <p id="pp-gate-msg"></p>
+      <button class="primary" id="pp-signin">Sign in</button>
+    </div>
+    <div id="pp-body">
+      <div class="pp-controls">
+        <button id="pp-prev" title="Previous">⏮</button>
+        <button id="pp-play" class="primary" title="Play / stop">▶</button>
+        <button id="pp-next" title="Next">⏭</button>
+        <span id="pp-now" class="pp-now"></span>
+      </div>
+      <ol id="pp-tracks" class="pl-tracks pp-tracks"></ol>
+    </div>
+  </dialog>
+
   <!-- Help -->
   <dialog id="help-dialog" class="dialog wide-dialog">
     <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
@@ -212,6 +283,6 @@ Rxy Retrig        Txy Tremor</pre>
   <div class="drop-overlay" id="drop-overlay" hidden>Drop a .MOD / .XM song or an audio sample</div>
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="/js/main.js"></script>
 </body>
 </html>

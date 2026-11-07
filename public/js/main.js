@@ -10,6 +10,7 @@ import { demoSong, newSong } from './demo.js';
 import { PatternEditor } from './ui/pattern-editor.js';
 import { initAuth } from './ui/auth.js';
 import { initSongsDialog } from './ui/songs-dialog.js';
+import { initPlaylists } from './ui/playlists.js';
 import { idbGet, idbSet, local } from './storage.js';
 import { api } from './api.js';
 
@@ -60,6 +61,7 @@ class App {
     this.held = new Map(); // key code -> channel (jamming)
     this.serverSong = null; // { id, name } when the song came from / was saved to My songs
     this.user = null;
+    this.onUserChange = []; // callbacks(user)
     this.saveTimer = null;
   }
 
@@ -76,6 +78,7 @@ class App {
       toast: (m, t) => this.toast(m, t),
     });
     this.songsDialog = initSongsDialog(this);
+    this.playlists = initPlaylists(this);
 
     const saved = await idbGet('autosave');
     let restored = false;
@@ -160,6 +163,7 @@ class App {
   setUser(user) {
     this.user = user;
     document.body.classList.toggle('signed-in', !!user);
+    for (const fn of this.onUserChange) fn(user);
   }
 
   updatePosition() {
@@ -749,17 +753,26 @@ class App {
   }
 
   async saveCloud(asNew = false) {
-    if (!this.user) { this.auth.open(); return; }
+    if (!this.user) { this.auth.open(); return null; }
     try {
       const data = this.exportSong('xm');
       const name = this.song.title || 'untitled';
       const id = asNew ? null : this.serverSong?.id;
-      const r = await api.saveSong({ id, name, format: 'xm', data });
+      let r;
+      try {
+        r = await api.saveSong({ id, name, format: 'xm', data });
+      } catch (e) {
+        // The song isn't ours (anymore) – e.g. deleted, or signed in as someone else: save a new one.
+        if (!id || !/not found/i.test(e.message)) throw e;
+        r = await api.saveSong({ id: null, name, format: 'xm', data });
+      }
       this.serverSong = { id: r.id, name };
       this.changed();
       this.toast(`Saved "${name}" to My songs`);
+      return this.serverSong;
     } catch (e) {
       this.toast(e.message, 'error');
+      return null;
     }
   }
 
@@ -781,6 +794,7 @@ class App {
       'save-cloud': () => this.saveCloud(false),
       'save-cloud-new': () => this.saveCloud(true),
       'my-songs': () => this.songsDialog.open(),
+      playlists: () => this.playlists.manager.open(),
       'play-song': () => this.play('song'),
       'play-pattern': () => this.play('pattern'),
       stop: () => this.stop(),
@@ -803,7 +817,7 @@ class App {
       if (a.startsWith('order-') || a.startsWith('pattern-') || a === 'set-restart') this.orderAction(a);
       else actions[a]?.();
       btn.closest('.dropdown')?.classList.remove('open');
-      if (!btn.closest('dialog') && !['open', 'load-sample', 'help', 'my-songs'].includes(a)) $('#pattern').focus();
+      if (!btn.closest('dialog') && !['open', 'load-sample', 'help', 'my-songs', 'playlists'].includes(a)) $('#pattern').focus();
     });
 
     // dropdown
