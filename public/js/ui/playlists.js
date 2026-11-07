@@ -449,15 +449,25 @@ function initPlayer(app) {
       stop();
       leaveListening();
     }
-    if (location.pathname.startsWith('/p/')) history.replaceState(null, '', '/');
+    // Leaving the playlist is a new history entry, so Back returns to it.
+    if (closingFromHistory) closingFromHistory = false;
+    else if (location.pathname.startsWith('/p/')) history.pushState(null, '', '/');
+  });
+
+  // Back/Forward between "/" and "/p/<token>" opens and closes the player.
+  let closingFromHistory = false;
+  window.addEventListener('popstate', () => {
+    const m = /^\/p\/([A-Za-z0-9_-]+)\/?$/.exec(location.pathname);
+    if (m) open(m[1], { fromHistory: true });
+    else if (dialog.open) { closingFromHistory = true; dialog.close(); }
   });
   // After signing in from the gate, reopen the playlist.
   app.onUserChange.push(() => { if (token && !playlist && !dialog.open) open(token); });
 
-  async function open(t) {
+  async function open(t, { fromHistory = false } = {}) {
     if (token !== t) { cache.clear(); index = -1; }
     token = t;
-    if (location.pathname !== `/p/${t}`) history.replaceState(null, '', `/p/${t}`);
+    if (!fromHistory && location.pathname !== `/p/${t}`) history.pushState(null, '', `/p/${t}`);
     if (!dialog.open) dialog.showModal();
     await load();
   }
