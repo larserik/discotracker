@@ -122,6 +122,7 @@ class App {
     this.playPos = null;
     this.engine.stop();
     this.engine.loadSong(song);
+    for (let i = 0; i < song.channels; i++) this.engine.mute(i, false);
     this.refreshAll();
   }
 
@@ -139,7 +140,16 @@ class App {
     this.saveTimer = setTimeout(() => this.autosave(), 1500);
   }
 
+  async flushAutosave() {
+    if (!this.saveTimer) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    await this.autosave();
+  }
+
   async autosave() {
+    this.saveTimer = null;
+    if (this.listening) return; // a playlist song is shown, not the user's work
     try {
       const { data } = saveSongFile(this.song, 'xm');
       await idbSet('autosave', { data, format: this.song.format, channelPan: this.song.channelPan, serverSong: this.serverSong, savedAt: Date.now() });

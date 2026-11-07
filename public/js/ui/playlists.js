@@ -1,8 +1,6 @@
 // Playlists: manage (owner), share by link/email, and listen (anyone allowed).
 import { api } from '../api.js';
 import { loadSongFile } from '../formats/index.js';
-import { AudioEngine } from '../audio/engine.js';
-import { local } from '../storage.js';
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, props = {}, ...children) => {
@@ -202,7 +200,10 @@ function initManager(app, playerOpen) {
 
 function initPlayer(app) {
   const dialog = $('#player-dialog');
-  const engine = new AudioEngine();
+  // Playback goes through the main tracker so the song scrolls in the pattern
+  // editor behind the player. The user's own song is stashed meanwhile.
+  const engine = app.engine;
+  let stash = null; // { song, serverSong, state, undo, redo }
   let token = null;
   let playlist = null;
   let index = -1;
@@ -210,8 +211,9 @@ function initPlayer(app) {
   let loadSeq = 0;
   const cache = new Map(); // songId -> { name, format, data }
 
-  engine.addEventListener('ended', () => { if (playing) next(1); });
+  engine.addEventListener('ended', () => { if (playing && stash) next(1); });
   engine.addEventListener('row', (e) => {
+    if (!stash || !playing) return;
     const m = e.detail;
     const t = playlist?.tracks[index];
     if (t) $('#pp-now').textContent = `${t.name} · pos ${String(m.order).padStart(2, '0')} row ${String(m.row).padStart(2, '0')}`;
@@ -252,9 +254,8 @@ function initPlayer(app) {
     if (!playlist?.tracks.length) return;
     index = (i + playlist.tracks.length) % playlist.tracks.length;
     const seq = ++loadSeq;
-    app.stop(); // never play on top of the editor
+    app.stop();
     await engine.start();
-    engine.setVolume((Number(local.get('dt.volume') ?? 80)) / 100);
     playing = true;
     render();
     $('#pp-now').textContent = 'Loading…';
@@ -262,8 +263,10 @@ function initPlayer(app) {
       const s = await fetchSong(index);
       if (seq !== loadSeq) return;
       const song = loadSongFile(s.data.slice(0), `${s.name}.${s.format}`);
-      engine.loadSong(song);
-      engine.play('song', 0, 0);
+      await enterListening();
+      app.setSong(song);
+      app.state.follow = true;
+      await app.play('song');
     } catch (e) {
       $('#pp-now').textContent = `Could not play: ${e.message}`;
       playing = false;
@@ -276,9 +279,35 @@ function initPlayer(app) {
   function stop() {
     loadSeq++;
     playing = false;
-    engine.stop();
+    app.stop();
     $('#pp-now').textContent = '';
     render();
+  }
+
+  async function enterListening() {
+    if (stash) return;
+    // Save the user's work first so a pending autosave can't store the playlist song instead.
+    await app.flushAutosave();
+    stash = {
+      song: app.song, serverSong: app.serverSong, undo: app.undo, redo: app.redo,
+      state: { ...app.state, selection: null }, mutes: app.mutes.slice(),
+    };
+    app.listening = true;
+    document.body.classList.add('listening');
+  }
+
+  /** Put the user's own song back into the editor. */
+  function leaveListening() {
+    if (!stash) return;
+    const s = stash;
+    stash = null;
+    app.listening = false;
+    document.body.classList.remove('listening');
+    app.setSong(s.song, { serverSong: s.serverSong });
+    Object.assign(app.state, s.state, { followActive: false });
+    app.undo = s.undo; app.redo = s.redo;
+    s.mutes.forEach((m, i) => { if (m) app.toggleMute(i); });
+    app.refreshAll();
   }
 
   async function openInEditor(i) {
@@ -286,6 +315,9 @@ function initPlayer(app) {
       const s = await fetchSong(i);
       const song = loadSongFile(s.data.slice(0), `${s.name}.${s.format}`);
       stop();
+      stash = null; // the opened song replaces the user's song (it was autosaved)
+      app.listening = false;
+      document.body.classList.remove('listening');
       dialog.close();
       // Owner: saving updates their song. Others: saving creates their own copy.
       const own = playlist.access === 'owner';
@@ -334,6 +366,7 @@ function initPlayer(app) {
   $('#pp-signin').addEventListener('click', () => { dialog.close(); app.auth.open(); });
   dialog.addEventListener('close', () => {
     stop();
+    leaveListening();
     if (location.pathname.startsWith('/p/')) history.replaceState(null, '', '/');
   });
   // After signing in from the gate, reopen the playlist.

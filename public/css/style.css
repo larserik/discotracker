@@ -335,6 +335,13 @@ body.editing .pattern-panel { box-shadow: inset 0 0 0 2px var(--danger); }
 .dialog .btnrow > input, .dialog .btnrow > select { flex: 3; }
 @media (max-width: 700px) { .pl-edit-grid { grid-template-columns: 1fr; } }
 
+/* The player docks at the bottom with no overlay, so the song scrolls behind it. */
+#player-dialog { margin: auto auto 44px; max-height: 50vh; overflow-y: auto; padding: 16px 20px; width: min(720px, calc(100vw - 32px)); }
+#player-dialog::backdrop { background: transparent; backdrop-filter: none; }
+#player-dialog .pp-tracks { max-height: 22vh; }
+#player-dialog h2 { margin-bottom: 2px; }
+#player-dialog .pp-controls { margin: 6px 0 8px; }
+
 /* toasts & drop */
 .toasts { position: fixed; bottom: 36px; right: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 50; max-width: min(380px, calc(100vw - 32px)); }
 .toast {
