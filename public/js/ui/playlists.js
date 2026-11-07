@@ -389,9 +389,11 @@ function initPlayer(app) {
         await app.switchSong(song, { serverSong, edited: true });
       }
       if (prev && prev.dirty && prev.draftId) app.toast(`"${prev.song.title || 'untitled'}" is kept in My songs (on this device).`);
-      app.toast(own
+      app.toast((own
         ? `You're editing "${s.name}". Save it from My songs to update it in your account.`
-        : `You're editing your own copy of "${s.name}". It's kept in My songs${app.user ? ' – save it to your account any time.' : ' on this device.'}`);
+        : `You're editing your own copy of "${s.name}". It's kept in My songs${app.user ? ' – save it to your account any time.' : ' on this device.'}`) +
+        ` Back to the playlist: ♫ ${playlist.name} at the top.`);
+      pulseChip();
       $('#pattern').focus();
     } catch (e) {
       app.toast(e.message, 'error');
@@ -468,6 +470,13 @@ function initPlayer(app) {
     chip.hidden = false;
   }
   function hideChip() { chip.hidden = true; }
+  function pulseChip() {
+    chip.classList.remove('attention');
+    void chip.offsetWidth; // restart the animation if it is already running
+    chip.classList.add('attention');
+    clearTimeout(pulseChip.t);
+    pulseChip.t = setTimeout(() => chip.classList.remove('attention'), 4000);
+  }
   chip.addEventListener('click', () => { if (token) open(token); });
 
   return { open };
