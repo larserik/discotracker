@@ -1,0 +1,22 @@
+services:
+  web:
+    build: .
+    image: discotracker:latest
+    container_name: discotracker
+    restart: unless-stopped
+    env_file: .env
+    # No "ports:" on purpose – nothing is bound on the host.
+    # Locally: browse to the container IP. In production nginx proxies to http://discotracker:80
+    expose:
+      - "80"
+    volumes:
+      - discotracker-data:/data
+    networks:
+      - nginx-network
+
+volumes:
+  discotracker-data:
+
+networks:
+  nginx-network:
+    external: true

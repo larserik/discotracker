@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DiscoTracker</title>
+  <meta name="description" content="Make music in your browser like on the Amiga, Atari and PC – load, play and edit .MOD and .XM modules.">
+  <meta name="theme-color" content="#0b0f1e">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23ff6fb5'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h14' stroke='%230b0f1e' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="logo" title="DiscoTracker">DISCO<span>TRACKER</span></div>
+
+    <nav class="menu" aria-label="File">
+      <button data-action="new" title="New song">New</button>
+      <button data-action="open" title="Open .MOD / .XM (or drop a file on the page)">Open…</button>
+      <div class="dropdown">
+        <button class="dropdown-toggle" aria-haspopup="true">Save ▾</button>
+        <div class="dropdown-menu" role="menu">
+          <button data-action="save-cloud" class="needs-user" role="menuitem">Save to My songs <kbd>Ctrl+S</kbd></button>
+          <button data-action="save-cloud-new" class="needs-user" role="menuitem">Save as new copy</button>
+          <button data-action="download-xm" role="menuitem">Download .XM</button>
+          <button data-action="download-mod" role="menuitem">Download .MOD</button>
+        </div>
+      </div>
+      <button data-action="my-songs" class="needs-user">My songs</button>
+      <button data-action="demo" title="Load the demo song">Demo</button>
+      <button data-action="help" title="Keyboard help">Help</button>
+    </nav>
+
+    <div class="transport" aria-label="Transport">
+      <button data-action="play-song" title="Play song (Enter)">▶ Song</button>
+      <button data-action="play-pattern" title="Play pattern (Shift+Enter)">▶ Pattern</button>
+      <button data-action="stop" title="Stop (Esc)">■ Stop</button>
+      <button data-action="toggle-edit" id="edit-btn" title="Edit / record mode (Space)">● Edit</button>
+    </div>
+
+    <div class="account" id="account">
+      <button id="signin-btn" class="primary">Sign in</button>
+      <span id="user-box" hidden>
+        <span id="user-email" class="user-email"></span>
+        <button id="logout-btn">Log out</button>
+      </span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel song-panel" aria-label="Song">
+      <h2>Song</h2>
+      <label class="field wide">Title <input id="song-title" maxlength="20" spellcheck="false"></label>
+      <div class="grid2">
+        <label class="field">BPM <input id="song-bpm" type="number" min="32" max="255"></label>
+        <label class="field">Speed <input id="song-speed" type="number" min="1" max="31"></label>
+        <label class="field">Channels <input id="song-channels" type="number" min="1" max="32"></label>
+        <label class="field">Rows <input id="pattern-rows" type="number" min="1" max="256"></label>
+      </div>
+
+      <h3>Order list <span class="hint" id="order-info"></span></h3>
+      <div class="orders" id="orders" tabindex="0" aria-label="Order list"></div>
+      <div class="btnrow">
+        <button data-action="order-insert" title="Insert position">Ins</button>
+        <button data-action="order-delete" title="Delete position">Del</button>
+        <button data-action="order-prev-pat" title="Previous pattern number">−</button>
+        <button data-action="order-next-pat" title="Next pattern number">+</button>
+      </div>
+      <div class="btnrow">
+        <button data-action="pattern-new" title="Use a new empty pattern at this position">New pat</button>
+        <button data-action="pattern-clone" title="Copy this pattern into a new pattern">Clone</button>
+        <button data-action="set-restart" title="Song restarts here when it loops">Restart</button>
+      </div>
+
+      <h3>Editing</h3>
+      <div class="grid2">
+        <label class="field">Octave <input id="edit-octave" type="number" min="0" max="7"></label>
+        <label class="field">Step <input id="edit-step" type="number" min="0" max="16"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="follow" checked> Follow playback</label>
+      <label class="field wide">Volume <input id="master-volume" type="range" min="0" max="100" value="80"></label>
+      <p class="format-badge" id="format-badge"></p>
+    </aside>
+
+    <section class="pattern-panel" aria-label="Pattern editor">
+      <div class="pattern-wrap"><canvas id="pattern" tabindex="0" aria-label="Pattern editor – use the keyboard to enter notes"></canvas></div>
+    </section>
+
+    <aside class="panel inst-panel" aria-label="Instruments">
+      <h2>Instruments</h2>
+      <div class="inst-list" id="inst-list" role="listbox" aria-label="Instrument list"></div>
+      <label class="field wide">Name <input id="inst-name" maxlength="22" spellcheck="false"></label>
+      <div class="btnrow">
+        <select id="preset-select" aria-label="Load a built-in instrument">
+          <option value="">Built-in instruments…</option>
+        </select>
+      </div>
+      <div class="btnrow">
+        <button data-action="load-sample" title="Load WAV, MP3, OGG, FLAC… into this instrument">Load sample…</button>
+        <button data-action="clear-instrument" title="Clear this instrument">Clear</button>
+        <button data-action="preview" title="Play C at the current octave">▶</button>
+      </div>
+
+      <h3>Sample <select id="sample-select" class="inline-select" aria-label="Sample in instrument"></select></h3>
+      <canvas id="waveform" class="waveform" height="90" aria-label="Sample waveform"></canvas>
+      <p class="hint" id="sample-info"></p>
+      <div class="grid2">
+        <label class="field">Volume <input id="smp-volume" type="number" min="0" max="64"></label>
+        <label class="field">Panning <input id="smp-panning" type="number" min="0" max="255"></label>
+        <label class="field">Finetune <input id="smp-finetune" type="number" min="-128" max="127"></label>
+        <label class="field">Rel. note <input id="smp-relnote" type="number" min="-96" max="95"></label>
+        <label class="field">Loop
+          <select id="smp-looptype"><option value="0">Off</option><option value="1">Forward</option><option value="2">Ping-pong</option></select>
+        </label>
+        <label class="field">Fadeout <input id="inst-fadeout" type="number" min="0" max="4095"></label>
+        <label class="field">Loop start <input id="smp-loopstart" type="number" min="0"></label>
+        <label class="field">Loop length <input id="smp-looplen" type="number" min="0"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="inst-volenv"> Volume envelope</label>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status">Ready.</span>
+    <span id="position" class="position"></span>
+  </footer>
+
+  <input type="file" id="file-song" accept=".mod,.xm,.nst" hidden>
+  <input type="file" id="file-sample" accept="audio/*,.wav,.mp3,.ogg,.flac,.aif,.aiff,.raw,.sam" hidden>
+
+  <!-- Sign in -->
+  <dialog id="signin-dialog" class="dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
+    <h2>Sign in</h2>
+    <form id="email-form" class="stack" novalidate>
+      <p class="muted">Enter your email and we'll send you a sign-in code. No password needed – an account is created automatically the first time.</p>
+      <label class="field wide">Email
+        <input id="signin-email" type="email" autocomplete="email" inputmode="email" required placeholder="you@example.com">
+      </label>
+      <label class="check"><input type="checkbox" id="remember-email" checked> Remember my email on this device</label>
+      <button type="submit" class="primary" id="send-code-btn">Send code</button>
+    </form>
+    <form id="code-form" class="stack" novalidate hidden>
+      <p class="muted">We sent a 6-digit code to <strong id="code-email"></strong>. Paste or type it here.</p>
+      <label class="field wide">Code
+        <input id="signin-code" class="code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="7" pattern="[0-9 ]*" placeholder="123456">
+      </label>
+      <button type="submit" class="primary" id="verify-btn">Sign in</button>
+      <div class="btnrow">
+        <button type="button" id="resend-btn" class="link">Send a new code</button>
+        <button type="button" id="change-email-btn" class="link">Use another email</button>
+      </div>
+    </form>
+    <p class="error" id="signin-error" role="alert"></p>
+  </dialog>
+
+  <!-- My songs -->
+  <dialog id="songs-dialog" class="dialog wide-dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
+    <h2>My songs</h2>
+    <div id="songs-list" class="songs-list"></div>
+  </dialog>
+
+  <!-- Help -->
+  <dialog id="help-dialog" class="dialog wide-dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
+    <h2>Keyboard</h2>
+    <div class="help-grid">
+      <div>
+        <h3>Playing notes</h3>
+        <p>The keyboard is a piano, like in FastTracker 2:</p>
+        <pre class="keys"> 2 3   5 6 7   9 0
+Q W E R T Y U I O P   ← upper octave
+ S D   G H J   L ;
+Z X C V B N M , . /   ← lower octave</pre>
+        <p><kbd>F1</kbd>–<kbd>F8</kbd> octave · <kbd>`</kbd> or <kbd>&lt;</kbd> key off</p>
+        <p>Hold several keys to play chords.</p>
+      </div>
+      <div>
+        <h3>Editing</h3>
+        <ul>
+          <li><kbd>Space</kbd> edit mode on/off (stops playback)</li>
+          <li><kbd>Enter</kbd> play song · <kbd>Shift+Enter</kbd> play pattern · <kbd>Esc</kbd> stop</li>
+          <li><kbd>↑ ↓ ← →</kbd> move · <kbd>Tab</kbd> next channel · <kbd>PgUp/PgDn</kbd> jump 16 rows</li>
+          <li><kbd>0–9 A–F</kbd> enter instrument / volume / effect values</li>
+          <li><kbd>Del</kbd> clear field · <kbd>Shift+Del</kbd> clear cell</li>
+          <li><kbd>Ins</kbd> insert row · <kbd>Backspace</kbd> delete row</li>
+          <li><kbd>Shift+arrows</kbd> or drag to select · <kbd>Ctrl+C/X/V</kbd> copy/cut/paste</li>
+          <li><kbd>Ctrl+Z</kbd> undo · <kbd>Ctrl+Y</kbd> redo · <kbd>Ctrl+A</kbd> select pattern</li>
+          <li><kbd>Ctrl+↑/↓</kbd> select instrument · <kbd>Ctrl+←/→</kbd> previous/next order position</li>
+          <li><kbd>Alt+↑/↓</kbd> transpose selection or note</li>
+          <li>Click a channel header to mute, right-click to solo</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Effects</h3>
+        <pre class="fx">0xy Arpeggio      Axy Volume slide
+1xx Porta up      Bxx Jump to order
+2xx Porta down    Cxx Set volume
+3xx Tone porta    Dxx Pattern break
+4xy Vibrato       Exy Extended
+5xy Porta+vol     Fxx Speed/BPM
+6xy Vibrato+vol   Gxx Global volume
+7xy Tremolo       Hxy Global vol slide
+8xx Panning       Kxx Key off
+9xx Sample offs.  Pxy Panning slide
+Rxy Retrig        Txy Tremor</pre>
+        <p class="muted">Volume column: 00–40 volume, <code>-x +x</code> slide, <code>Dx Ux</code> fine slide, <code>Px</code> pan, <code>Vx</code> vibrato, <code>Mx</code> porta.</p>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="drop-overlay" id="drop-overlay" hidden>Drop a .MOD / .XM song or an audio sample</div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
