@@ -62,6 +62,7 @@ class App {
     this.serverSong = null; // { id, name } when the song came from / was saved to My songs
     this.draftId = null; // id of this song in "My songs → On this device" once it has been changed
     this.dirty = false; // changed since it was last saved to the account / loaded
+    this.origin = null; // { songId, name } when the song is a copy of a playlist song
     this.user = null;
     this.onUserChange = []; // callbacks(user)
     this.saveTimer = null;
@@ -89,7 +90,7 @@ class App {
         const song = loadSongFile(saved.data.buffer ?? saved.data, 'autosave.xm');
         if (saved.format === 'mod') { song.format = 'mod'; song.linear = false; }
         if (saved.channelPan) song.channelPan = saved.channelPan;
-        this.setSong(song, { serverSong: saved.serverSong || null, draftId: saved.draftId || null, dirty: !!saved.dirty });
+        this.setSong(song, { serverSong: saved.serverSong || null, draftId: saved.draftId || null, dirty: !!saved.dirty, origin: saved.origin || null });
         restored = true;
         this.status('Restored your last session.');
       } catch (e) {
@@ -110,8 +111,9 @@ class App {
   // Song
 
   /** Low-level: show `song` in the editor. Use switchSong() for user actions. */
-  setSong(song, { serverSong = null, draftId = null, dirty = false } = {}) {
+  setSong(song, { serverSong = null, draftId = null, dirty = false, origin = null } = {}) {
     this.song = song;
+    this.origin = origin;
     this.serverSong = serverSong;
     this.draftId = draftId;
     this.dirty = dirty;
@@ -144,10 +146,10 @@ class App {
    * changes it is (already) kept in "My songs → On this device".
    * `edited`: the new song counts as the user's own work in progress right away.
    */
-  async switchSong(song, { serverSong = null, draftId = null, dirty = false, edited = false } = {}) {
+  async switchSong(song, { serverSong = null, draftId = null, dirty = false, origin = null, edited = false } = {}) {
     await this.flushAutosave();
     const prev = this.song && this.dirty && this.draftId ? this.song.title || 'untitled' : null;
-    this.setSong(song, { serverSong, draftId, dirty });
+    this.setSong(song, { serverSong, draftId, dirty, origin });
     if (edited) this.changed();
     else this.scheduleAutosave();
     if (prev) this.toast(`"${prev}" is kept in My songs (on this device).`);
@@ -178,7 +180,7 @@ class App {
     if (this.listening) return; // a playlist song is shown, not the user's work
     try {
       const { data } = saveSongFile(this.song, 'xm');
-      const meta = { format: this.song.format, channelPan: this.song.channelPan, serverSong: this.serverSong };
+      const meta = { format: this.song.format, channelPan: this.song.channelPan, serverSong: this.serverSong, origin: this.origin };
       await idbSet('autosave', { data, ...meta, draftId: this.draftId, dirty: this.dirty, savedAt: Date.now() });
       if (this.dirty && this.draftId) {
         await putDraft({ id: this.draftId, title: this.song.title || 'untitled', data, ...meta, updatedAt: Date.now() });
@@ -707,12 +709,17 @@ class App {
   // ------------------------------------------------------------------
   // Transport
 
-  async play(mode) {
+  /** `from`: { order, row } to start somewhere else than the top of the current order position. */
+  async play(mode, from = null) {
     await this.engine.start();
     const st = this.state;
     this.state.followActive = st.follow;
-    if (mode === 'pattern') this.engine.play('pattern', st.order, 0, st.pattern);
-    else this.engine.play('song', st.order, 0);
+    if (from) {
+      st.order = Math.max(0, Math.min(this.song.orders.length - 1, from.order));
+      st.pattern = this.song.orders[st.order];
+    }
+    if (mode === 'pattern') this.engine.play('pattern', st.order, from?.row ?? 0, st.pattern);
+    else this.engine.play('song', st.order, from?.row ?? 0);
   }
 
   stop() {
@@ -764,7 +771,8 @@ class App {
       const buf = await file.arrayBuffer();
       const song = loadSongFile(buf, file.name);
       if (!song.title || song.title === 'untitled') song.title = file.name.replace(/\.[^.]+$/, '').slice(0, 20);
-      await this.switchSong(song, { edited: true });
+      // Not in My songs until it is changed – the file itself is on the user's disk.
+      await this.switchSong(song);
       this.toast(`Loaded ${file.name} (${song.format.toUpperCase()}, ${song.channels} ch)`);
       this.status(`${song.title} – press Enter to play.`);
     } catch (e) {

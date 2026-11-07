@@ -51,11 +51,11 @@ export async function getDraft(id) {
   return idbGet('draft:' + id);
 }
 
-/** draft = { id, title, data(Uint8Array XM), format, channelPan, serverSong, updatedAt } */
+/** draft = { id, title, data(Uint8Array XM), format, channelPan, serverSong, origin, updatedAt } */
 export async function putDraft(draft) {
   await idbSet('draft:' + draft.id, draft);
   const list = ((await idbGet('drafts')) || []).filter((d) => d.id !== draft.id);
-  list.push({ id: draft.id, title: draft.title, format: draft.format, size: draft.data.length, serverSong: draft.serverSong || null, updatedAt: draft.updatedAt });
+  list.push({ id: draft.id, title: draft.title, format: draft.format, size: draft.data.length, serverSong: draft.serverSong || null, origin: draft.origin || null, updatedAt: draft.updatedAt });
   await idbSet('drafts', list);
 }
 

@@ -12,7 +12,7 @@ const el = (tag, props = {}, ...children) => {
 const fmtDate = (ms) => new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const fmtSize = (b) => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.ceil(b / 1024)} KB`);
 
-function loadDraftSong(d) {
+export function loadDraftSong(d) {
   const song = loadSongFile(d.data.buffer ?? d.data, 'draft.xm');
   if (d.format === 'mod') { song.format = 'mod'; song.linear = false; }
   if (d.channelPan) song.channelPan = d.channelPan;
@@ -86,7 +86,7 @@ export function initSongsDialog(app) {
   async function openDraft(id) {
     const d = await getDraft(id);
     if (!d) throw new Error('This song is no longer on this device.');
-    await app.switchSong(loadDraftSong(d), { serverSong: d.serverSong || null, draftId: id, dirty: true });
+    await app.switchSong(loadDraftSong(d), { serverSong: d.serverSong || null, draftId: id, dirty: true, origin: d.origin || null });
     dialog.close();
     app.toast(`Opened "${d.title}"`);
   }
