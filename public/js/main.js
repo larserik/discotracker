@@ -253,7 +253,11 @@ class App {
     });
     const cur = box.children[st.order];
     if (cur) cur.scrollIntoView({ block: 'nearest' });
-    $('#order-info').textContent = `${s.orders.length} pos · ${s.patterns.length} pat`;
+    const unused = this.unusedPatterns().length;
+    $('#order-info').textContent = `${s.orders.length} pos · ${s.patterns.length} pat${unused ? ` · ${unused} unused` : ''}`;
+    const ub = $('#pattern-unused-btn');
+    ub.disabled = !unused;
+    ub.title = unused ? `Remove the ${unused} pattern${unused > 1 ? 's' : ''} not played anywhere in the order list` : 'No unused patterns';
   }
 
   // ------------------------------------------------------------------
@@ -514,10 +518,30 @@ class App {
     this.redo = [];
   }
 
+  /** Snapshot of all patterns and the order list, for undoing changes to the song's structure. */
+  structureSnapshot() {
+    const s = this.song;
+    return { structure: { patterns: s.patterns.map((p) => ({ rows: p.rows, data: p.data.slice() })), orders: s.orders.slice(), restart: s.restart, order: this.state.order } };
+  }
+
+  pushStructureUndo() {
+    this.undo.push(this.structureSnapshot());
+    if (this.undo.length > 200) this.undo.shift();
+    this.redo = [];
+  }
+
   applyHistory(from, to) {
     const e = from.pop();
     if (!e) return;
     const s = this.song;
+    if (e.structure) {
+      to.push(this.structureSnapshot());
+      const x = e.structure;
+      s.patterns = x.patterns; s.orders = x.orders; s.restart = x.restart;
+      this.state.order = Math.min(x.order, s.orders.length - 1);
+      this.ordersChanged(true);
+      return;
+    }
     const back = [];
     for (const x of e.group || [e]) {
       if (!s.patterns[x.pattern]) continue;
@@ -783,7 +807,72 @@ class App {
       case 'set-restart':
         s.restart = st.order;
         return this.ordersChanged();
+      case 'pattern-delete':
+        return this.deletePattern(st.pattern);
+      case 'pattern-unused':
+        return this.removeUnusedPatterns();
     }
+  }
+
+  unusedPatterns() {
+    const used = new Set(this.song.orders);
+    return this.song.patterns.map((_, i) => i).filter((i) => !used.has(i));
+  }
+
+  /** Remove patterns (indexes) and renumber the rest; order positions using them are removed. */
+  removePatterns(remove) {
+    const s = this.song, st = this.state;
+    const gone = new Set(remove);
+    const map = [];
+    let k = 0;
+    s.patterns.forEach((_, i) => { map[i] = gone.has(i) ? -1 : k++; });
+    const before = st.order;
+    const orders = [];
+    let newOrder = 0, restart = 0;
+    s.orders.forEach((p, i) => {
+      if (i === s.restart) restart = orders.length;
+      if (i === before) newOrder = orders.length;
+      if (map[p] >= 0) orders.push(map[p]);
+    });
+    s.patterns = s.patterns.filter((_, i) => !gone.has(i));
+    if (!s.patterns.length) s.patterns.push(createPattern(64, s.channels));
+    s.orders = orders.length ? orders : [0];
+    s.restart = Math.min(restart, s.orders.length - 1);
+    st.order = Math.min(newOrder, s.orders.length - 1);
+    st.selection = null;
+    this.ordersChanged(true);
+  }
+
+  async deletePattern(idx) {
+    const s = this.song;
+    if (s.patterns.length <= 1) return this.toast('A song needs at least one pattern.', 'warn');
+    const at = s.orders.map((p, i) => (p === idx ? hex2(i) : null)).filter(Boolean);
+    if (at.length >= s.orders.length && !this.unusedPatterns().length) {
+      return this.toast('This pattern is the only one played in the song – add another pattern first.', 'warn');
+    }
+    const ok = await confirmDialog({
+      title: `Delete pattern ${hex2(idx)}?`,
+      message: (at.length ? `It is played at position${at.length > 1 ? 's' : ''} ${at.join(', ')} in the order list; ${at.length > 1 ? 'those positions are' : 'that position is'} removed too. ` : '')
+        + 'Patterns with higher numbers move down one number. Cmd/Ctrl+Z undoes it.',
+      confirmText: 'Delete pattern', danger: true,
+    });
+    if (!ok) return;
+    this.pushStructureUndo();
+    this.removePatterns([idx]);
+    this.toast(`Pattern ${hex2(idx)} deleted`);
+  }
+
+  async removeUnusedPatterns({ ask = true } = {}) {
+    const unused = this.unusedPatterns();
+    if (!unused.length) { this.toast('Every pattern is used in the order list.'); return; }
+    if (ask && !(await confirmDialog({
+      title: `Remove ${unused.length} unused pattern${unused.length > 1 ? 's' : ''}?`,
+      message: `Pattern${unused.length > 1 ? 's' : ''} ${unused.map(hex2).join(', ')} ${unused.length > 1 ? 'are' : 'is'} not played anywhere in the order list. The other patterns are renumbered. Cmd/Ctrl+Z undoes it.`,
+      confirmText: 'Remove', danger: true,
+    }))) return;
+    this.pushStructureUndo();
+    this.removePatterns(unused);
+    this.toast(`Removed ${unused.length} unused pattern${unused.length > 1 ? 's' : ''}`);
   }
 
   // ------------------------------------------------------------------
@@ -868,7 +957,16 @@ class App {
     return data;
   }
 
-  download(format) {
+  async download(format) {
+    const unused = this.unusedPatterns();
+    if (unused.length) {
+      const remove = await confirmDialog({
+        title: `Remove ${unused.length} unused pattern${unused.length > 1 ? 's' : ''} first?`,
+        message: `Pattern${unused.length > 1 ? 's' : ''} ${unused.map(hex2).join(', ')} ${unused.length > 1 ? 'are' : 'is'} not played anywhere in the song. Leaving ${unused.length > 1 ? 'them' : 'it'} out makes the file smaller.`,
+        confirmText: 'Remove and download', cancelText: 'Keep and download',
+      });
+      if (remove) await this.removeUnusedPatterns({ ask: false });
+    }
     const data = this.exportSong(format);
     const name = (this.song.title || 'untitled').replace(/[^\w\- .]+/g, '_').trim() || 'untitled';
     const blob = new Blob([data], { type: 'application/octet-stream' });
