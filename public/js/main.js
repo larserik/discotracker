@@ -1037,7 +1037,7 @@ class App {
     const st = this.state;
     const code = e.code;
 
-    const action = actionFor(e);
+    const action = actionFor(e, { edit: st.edit });
     if (action) {
       e.preventDefault();
       this.runKeyAction(action, e);
@@ -1105,6 +1105,7 @@ class App {
       clearCell: () => { if (st.edit || st.selection) this.clearField(true); },
       insertSpace: () => { if (st.edit) this.insertRow(false); },
       deleteAbove: () => { if (st.edit) this.insertRow(true); },
+      newRow: () => { if (st.edit) { this.insertRow(false); this.moveRow(1, false); } },
       transposeUp: () => { if (st.edit) this.transpose(1); },
       transposeDown: () => { if (st.edit) this.transpose(-1); },
       octaveUp: () => { if (st.edit) this.transpose(12); },

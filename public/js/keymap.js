@@ -17,10 +17,11 @@ export const ACTIONS = [
   { id: 'stopOrEdit', group: 'Playback', label: 'Stop, or turn edit mode on/off when stopped', keys: ['Space'] },
   { id: 'stop', group: 'Playback', label: 'Stop / clear the selection', keys: ['Escape'] },
 
-  { id: 'clearField', group: 'Editing', label: 'Clear the note or value at the cursor', keys: ['Delete', 'Backspace'] },
+  { id: 'newRow', group: 'Editing', when: 'edit', label: 'New empty row at the cursor, push the rest down and move down (like Enter in a text editor)', keys: ['Enter'] },
+  { id: 'deleteAbove', group: 'Editing', when: 'edit', label: 'Delete the row above, pull the rest up and move up (like Backspace in a text editor)', keys: ['Backspace'] },
+  { id: 'clearField', group: 'Editing', label: 'Clear the note or value at the cursor', keys: ['Delete'] },
   { id: 'clearCell', group: 'Editing', label: 'Clear note, instrument, volume and effect', keys: ['Shift+Delete', 'Shift+Backspace'] },
-  { id: 'insertSpace', group: 'Editing', label: 'Insert an empty row in this channel (push down)', keys: ['Insert'] },
-  { id: 'deleteAbove', group: 'Editing', label: 'Delete the row above in this channel (pull up)', keys: ['Mod+Backspace'] },
+  { id: 'insertSpace', group: 'Editing', label: 'Insert an empty row at the cursor (push down, cursor stays)', keys: ['Insert'] },
   { id: 'transposeUp', group: 'Editing', label: 'Transpose note/selection up', keys: ['Alt+ArrowUp'] },
   { id: 'transposeDown', group: 'Editing', label: 'Transpose note/selection down', keys: ['Alt+ArrowDown'] },
   { id: 'octaveUp', group: 'Editing', label: 'Transpose note/selection an octave up', keys: ['Alt+Shift+ArrowUp'] },
@@ -64,12 +65,22 @@ const MODIFIER_CODES = new Set(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'Contr
 
 let overrides = {};
 try { overrides = JSON.parse(local.get(STORE) || '{}') || {}; } catch { overrides = {}; }
-let index = null; // combo -> action id
+// An action with `when: 'edit'` only applies in edit mode and wins over an action without `when`
+// on the same key, so a key can do one thing while editing and another otherwise.
+let index = null; // combo -> { any, edit } action ids
 
 function rebuild() {
   index = new Map();
-  for (const a of ACTIONS) for (const c of keysFor(a.id)) if (!index.has(c)) index.set(c, a.id);
+  for (const a of ACTIONS) {
+    for (const c of keysFor(a.id)) {
+      const slot = index.get(c) || {};
+      const k = a.when || 'any';
+      if (!slot[k]) slot[k] = a.id;
+      index.set(c, slot);
+    }
+  }
 }
+const sameContext = (a, b) => (a.when || 'any') === (b.when || 'any');
 
 export const keysFor = (id) => overrides[id] ?? BY_ID.get(id)?.keys ?? [];
 export const isDefault = (id) => !(id in overrides);
@@ -85,8 +96,9 @@ export const onKeymapChange = (f) => listeners.push(f);
 /** Set an action's keys. Returns the actions the combos were taken away from. */
 export function setKeys(id, combos) {
   const taken = [];
+  const me = BY_ID.get(id);
   for (const a of ACTIONS) {
-    if (a.id === id) continue;
+    if (a.id === id || !sameContext(a, me)) continue;
     const cur = keysFor(a.id);
     const left = cur.filter((c) => !combos.includes(c));
     if (left.length !== cur.length) { overrides[a.id] = left; taken.push(a); }
@@ -107,13 +119,14 @@ export function comboFromEvent(e, code = e.code) {
   return (e.ctrlKey || e.metaKey ? 'Mod+' : '') + (e.altKey ? 'Alt+' : '') + (e.shiftKey ? 'Shift+' : '') + code;
 }
 
-/** The action bound to this keydown, if any. */
-export function actionFor(e) {
+/** The action bound to this keydown, if any. ctx.edit: edit mode is on. */
+export function actionFor(e, ctx = {}) {
   if (!index) rebuild();
-  const hit = index.get(comboFromEvent(e));
+  const pick = (slot) => slot && ((ctx.edit && slot.edit) || slot.any);
+  const hit = pick(index.get(comboFromEvent(e)));
   if (hit) return hit;
   // Shortcuts like Cmd+Z follow the letter on non-QWERTY layouts (AZERTY, Dvorak…) too.
-  if ((e.ctrlKey || e.metaKey) && /^[a-z]$/i.test(e.key)) return index.get(comboFromEvent(e, `Key${e.key.toUpperCase()}`)) || null;
+  if ((e.ctrlKey || e.metaKey) && /^[a-z]$/i.test(e.key)) return pick(index.get(comboFromEvent(e, `Key${e.key.toUpperCase()}`))) || null;
   return null;
 }
 

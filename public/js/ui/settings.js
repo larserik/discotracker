@@ -15,8 +15,8 @@ const el = (tag, props = {}, ...children) => {
 const HELP = [
   ['stopOrEdit', 'stop / edit mode on/off'],
   ['playSong', 'play song'], ['playFromRow', 'play from the cursor row'], ['playPattern', 'play pattern'], ['stop', 'stop'],
-  ['clearField', 'clear note/value'], ['clearCell', 'clear the whole cell'],
-  ['insertSpace', 'insert row'], ['deleteAbove', 'delete row above (pull up)'],
+  ['newRow', 'in edit mode: new row, push down'], ['deleteAbove', 'in edit mode: delete row above, pull up'],
+  ['clearField', 'clear note/value'], ['clearCell', 'clear the whole cell'], ['insertSpace', 'insert row (cursor stays)'],
   ['nextChannel', 'next channel'], ['pageDown', '16 rows down'],
   ['copy', 'copy'], ['cut', 'cut'], ['paste', 'paste'], ['undo', 'undo'], ['redo', 'redo'], ['selectAll', 'select pattern'],
   ['transposeUp', 'transpose up'], ['transposeDown', 'transpose down'],
@@ -55,7 +55,8 @@ export function initSettings(app) {
         else chips.append(el('button', { type: 'button', className: 'chip-add', title: 'Add a key', ariaLabel: `Add a key for ${a.label}`,
           onclick: () => { capturing = { id: a.id }; render(); } }, '+'));
         tb.append(el('tr', {},
-          el('td', { className: 'key-label', textContent: a.label }),
+          el('td', { className: 'key-label' }, a.label,
+            a.when === 'edit' ? el('span', { className: 'badge', title: 'Only in edit mode. Outside edit mode the same key can do something else.', textContent: 'edit mode' }) : ''),
           el('td', {}, chips),
           el('td', { className: 'acts' }, isDefault(a.id) ? '' : el('button', { type: 'button', textContent: 'Reset', title: 'Back to the default keys',
             onclick: () => { resetKeys(a.id); render(); } }))));
