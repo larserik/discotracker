@@ -472,6 +472,12 @@ class App {
     this.editor.invalidate();
   }
 
+  /** Pick an order position; while playing, playback jumps there right away. */
+  selectOrder(i) {
+    this.gotoOrder(i);
+    if (this.engine.playing) this.play(this.playMode || 'song', { order: this.state.order, row: 0 });
+  }
+
   // ------------------------------------------------------------------
   // Pattern editing
 
@@ -725,6 +731,7 @@ class App {
   async play(mode, from = null) {
     await this.engine.start();
     const st = this.state;
+    this.playMode = mode;
     this.state.followActive = st.follow;
     if (from) {
       st.order = Math.max(0, Math.min(this.song.orders.length - 1, from.order));
@@ -938,7 +945,7 @@ class App {
 
     $('#orders').addEventListener('click', (e) => {
       const el = e.target.closest('.order');
-      if (el) this.gotoOrder(+el.dataset.index);
+      if (el) this.selectOrder(+el.dataset.index);
     });
 
     $('#inst-list').addEventListener('click', (e) => {
@@ -1122,8 +1129,8 @@ class App {
       pageDown: () => this.moveRow(16, false),
       top: () => this.setCursor({ row: 0 }),
       bottom: () => this.setCursor({ row: this.pat.rows - 1 }),
-      prevOrder: () => this.gotoOrder(st.order - 1),
-      nextOrder: () => this.gotoOrder(st.order + 1),
+      prevOrder: () => this.selectOrder(st.order - 1),
+      nextOrder: () => this.selectOrder(st.order + 1),
       prevInstrument: () => this.selectInstrument(st.instrument - 1),
       nextInstrument: () => this.selectInstrument(st.instrument + 1),
       selUp: () => this.extendSelection(-1, 0),
