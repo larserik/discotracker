@@ -15,6 +15,7 @@ import { idbGet, idbSet, local, newDraftId, putDraft, deleteDraft } from './stor
 import { api } from './api.js';
 import { actionFor } from './keymap.js';
 import { initSettings } from './ui/settings.js';
+import { confirmDialog } from './ui/confirm.js';
 
 const $ = (sel) => document.querySelector(sel);
 const HEX = '0123456789ABCDEF';
@@ -379,12 +380,16 @@ class App {
       }
       sel.append(og);
     }
-    sel.addEventListener('change', () => {
+    sel.addEventListener('change', async () => {
       const id = sel.value;
       sel.value = '';
       if (!id) return;
       const cur = this.currentInstrument();
-      if (cur && cur.samples.some((s) => s.data.length) && !confirm(`Replace instrument ${hex2(this.state.instrument)} "${cur.name}"?`)) return;
+      if (cur && cur.samples.some((s) => s.data.length) && !(await confirmDialog({
+        title: `Replace instrument ${hex2(this.state.instrument)}?`,
+        message: `"${cur.name || 'Untitled'}" is replaced by the built-in ${PRESETS.find((p) => p.id === id)?.name || 'instrument'}. Notes using it keep playing with the new sound.`,
+        confirmText: 'Replace',
+      }))) return;
       this.ensureInstrument(this.state.instrument);
       this.song.instruments[this.state.instrument - 1] = makePreset(id);
       this.instrumentChanged();
@@ -857,9 +862,13 @@ class App {
       stop: () => this.stop(),
       'toggle-edit': () => { this.state.edit = !this.state.edit; this.updatePosition(); this.editor.invalidate(); },
       'load-sample': () => $('#file-sample').click(),
-      'clear-instrument': () => {
+      'clear-instrument': async () => {
         const ins = this.currentInstrument();
-        if (!ins || !confirm(`Clear instrument ${hex2(this.state.instrument)}?`)) return;
+        if (!ins || !(await confirmDialog({
+          title: `Clear instrument ${hex2(this.state.instrument)}?`,
+          message: `"${ins.name || 'Untitled'}" and its samples are removed. Notes using it go silent. This cannot be undone.`,
+          confirmText: 'Clear', danger: true,
+        }))) return;
         this.song.instruments[this.state.instrument - 1] = createInstrument();
         this.instrumentChanged();
         this.renderInstList();
@@ -901,14 +910,15 @@ class App {
     num($('#song-speed'), 1, 31, (v) => { this.song.speed = v; this.engine.setParams({ speed: v }); this.changed(); });
     num($('#song-channels'), 1, 32, (v) => {
       if (this.song.format === 'mod' && v % 2) v += 1;
-      if (v < this.song.channels && !confirm(`Remove channels ${v + 1}–${this.song.channels}? Notes in them will be deleted.`)) { this.refreshSongPanel(); return; }
-      setChannelCount(this.song, v);
-      this.mutes = new Array(v).fill(false);
-      this.state.ch = Math.min(this.state.ch, v - 1);
-      this.undo = []; this.redo = [];
-      this.engine.loadSong(this.song);
-      this.refreshAll();
-      this.changed();
+      if (v < this.song.channels) {
+        confirmDialog({
+          title: `Remove channel${v + 1 < this.song.channels ? 's' : ''} ${v + 1}${v + 1 < this.song.channels ? `–${this.song.channels}` : ''}?`,
+          message: 'The notes in them are deleted.',
+          confirmText: 'Remove', danger: true,
+        }).then((ok) => (ok ? this.setChannels(v) : this.refreshSongPanel()));
+        return;
+      }
+      this.setChannels(v);
     });
     num($('#pattern-rows'), 1, 256, (v) => {
       this.pushUndo();
@@ -1061,6 +1071,16 @@ class App {
       const note = st.octave * 12 + NOTE_KEYS[code] + 1;
       if (note <= 96) this.noteDown(code, note);
     }
+  }
+
+  setChannels(v) {
+    setChannelCount(this.song, v);
+    this.mutes = new Array(v).fill(false);
+    this.state.ch = Math.min(this.state.ch, v - 1);
+    this.undo = []; this.redo = [];
+    this.engine.loadSong(this.song);
+    this.refreshAll();
+    this.changed();
   }
 
   runKeyAction(id, e) {

@@ -1,5 +1,6 @@
 // My songs: work in progress on this device (everyone) + songs in the account (signed in).
 import { api } from '../api.js';
+import { confirmDialog } from './confirm.js';
 import { loadSongFile } from '../formats/index.js';
 import { listDrafts, getDraft, deleteDraft } from '../storage.js';
 
@@ -98,7 +99,11 @@ export function initSongsDialog(app) {
   }
 
   async function removeDraft(d) {
-    if (!confirm(`Delete "${d.title}" from this device?${d.serverSong ? ' The version saved in your account is kept.' : ' This cannot be undone.'}`)) return;
+    if (!(await confirmDialog({
+      title: `Delete "${d.title || 'untitled'}" from this device?`,
+      message: d.serverSong ? 'The version saved in your account is kept.' : 'This cannot be undone.',
+      confirmText: 'Delete', danger: true,
+    }))) return;
     await deleteDraft(d.id);
     if (app.draftId === d.id) app.draftId = null;
     refresh();
@@ -112,7 +117,11 @@ export function initSongsDialog(app) {
   }
 
   async function removeCloud(id) {
-    if (!confirm('Delete this song from your account permanently? It is also removed from your playlists.')) return;
+    if (!(await confirmDialog({
+      title: 'Delete this song from your account?',
+      message: 'It is deleted permanently and removed from your playlists.',
+      confirmText: 'Delete', danger: true,
+    }))) return;
     await api.deleteSong(id);
     if (app.serverSong?.id === id) app.serverSong = null;
     refresh();

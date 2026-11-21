@@ -2,6 +2,7 @@
 import {
   ACTIONS, GROUPS, keysFor, isDefault, setKeys, resetKeys, resetAllKeys, comboFromEvent, formatCombo, onKeymapChange,
 } from '../keymap.js';
+import { confirmDialog } from './confirm.js';
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, props = {}, ...children) => {
@@ -83,8 +84,12 @@ export function initSettings(app) {
   dialog.addEventListener('cancel', (e) => { if (capturing) { e.preventDefault(); stopCapture(); } });
   dialog.addEventListener('close', () => { capturing = null; filter.value = ''; $('#pattern').focus(); });
   filter.addEventListener('input', render);
-  $('#keys-reset-all').addEventListener('click', () => {
-    if (!confirm('Set all keys back to the defaults?')) return;
+  $('#keys-reset-all').addEventListener('click', async () => {
+    if (!(await confirmDialog({
+      title: 'Reset all keys?',
+      message: 'All keyboard shortcuts go back to the defaults. Your changes are lost.',
+      confirmText: 'Reset all', danger: true,
+    }))) return;
     resetAllKeys();
     render();
   });

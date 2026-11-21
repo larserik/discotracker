@@ -1,5 +1,6 @@
 // Playlists: manage (owner), share by link/email, and listen (anyone allowed).
 import { api } from '../api.js';
+import { confirmDialog } from './confirm.js';
 import { loadSongFile } from '../formats/index.js';
 import { local, listDrafts, getDraft } from '../storage.js';
 import { loadDraftSong } from './songs-dialog.js';
@@ -210,7 +211,11 @@ function initManager(app, playerOpen) {
     app.toast('Link copied');
   });
   $('#pl-new-link').addEventListener('click', guard(async () => {
-    if (!confirm('Make a new link? The current link stops working, also for people you invited.')) return;
+    if (!(await confirmDialog({
+      title: 'Make a new link?',
+      message: 'The current link stops working, also for people you invited. People you shared with by email can still find the playlist under Playlists when signed in.',
+      confirmText: 'Make new link', danger: true,
+    }))) return;
     current = await api.newPlaylistLink(current.id);
     renderEdit();
   }));
@@ -228,7 +233,11 @@ function initManager(app, playerOpen) {
   }));
   $('#pl-play').addEventListener('click', () => { const t = current.token; dialog.close(); playerOpen(t); });
   $('#pl-delete').addEventListener('click', guard(async () => {
-    if (!confirm(`Delete the playlist "${current.name}"? The songs stay in My songs.`)) return;
+    if (!(await confirmDialog({
+      title: `Delete "${current.name}"?`,
+      message: 'The playlist and its link are removed. The songs stay in My songs.',
+      confirmText: 'Delete playlist', danger: true,
+    }))) return;
     await api.deletePlaylist(current.id);
     showList();
   }));

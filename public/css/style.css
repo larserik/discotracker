@@ -108,6 +108,8 @@ button:disabled { opacity: .55; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 button.primary:hover { filter: brightness(1.08); }
 button.danger { color: var(--danger); }
+button.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+button.danger-solid:hover { filter: brightness(1.08); }
 button.link { background: none; border: 0; padding: 2px 0; color: var(--muted); text-decoration: underline; }
 button.active { background: var(--danger); border-color: var(--danger); color: #fff; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
@@ -433,3 +435,13 @@ body.editing .pattern-panel { box-shadow: inset 0 0 0 2px var(--danger); }
   .keys-table .key-label { width: auto; }
 }
 @media (prefers-reduced-motion: reduce) { .key-chip.capturing { animation: none; } }
+
+/* In-page confirm */
+.confirm-dialog { width: min(400px, calc(100vw - 32px)); }
+.confirm-dialog[open] { animation: confirm-in .14s ease-out; }
+.confirm-dialog h2 { margin-bottom: 8px; word-break: break-word; }
+.confirm-message { color: var(--muted); margin: 0 0 18px; line-height: 1.45; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.confirm-actions button { min-width: 84px; }
+@keyframes confirm-in { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .confirm-dialog[open] { animation: none; } }
