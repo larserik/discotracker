@@ -40,6 +40,9 @@
     </div>
 
     <div class="account" id="account">
+      <button id="settings-btn" class="icon-btn" data-action="settings" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      </button>
       <button id="signin-btn" class="primary">Sign in</button>
       <div class="dropdown" id="user-box" hidden>
         <button class="dropdown-toggle account-btn" id="account-btn" aria-haspopup="true" aria-label="Account menu">
@@ -49,6 +52,7 @@
         </button>
         <div class="dropdown-menu dropdown-right" role="menu">
           <div class="menu-header">Signed in as<strong id="menu-email"></strong></div>
+          <button data-action="settings" role="menuitem">Settings…</button>
           <button id="logout-btn" role="menuitem">Sign out</button>
         </div>
       </div>
@@ -250,6 +254,22 @@
   </dialog>
 
   <!-- Help -->
+  <dialog id="settings-dialog" class="dialog wide-dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
+    <h2>Settings</h2>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" class="tab active" aria-selected="true" data-tab="keys">Keyboard</button>
+    </div>
+    <section class="tab-panel" data-panel="keys">
+      <div class="keys-head">
+        <p class="muted">Click <b>+</b> and press the keys you want. A key can only do one thing, so it is moved from any other action. The piano keys and hex values (0–9, A–F) are fixed. Saved in this browser.</p>
+        <input type="search" id="keys-filter" placeholder="Find an action…" aria-label="Find an action">
+      </div>
+      <div id="keys-list" class="keys-list"></div>
+      <div class="btnrow keys-foot"><button type="button" id="keys-reset-all" class="danger">Reset all to defaults</button></div>
+    </section>
+  </dialog>
+
   <dialog id="help-dialog" class="dialog wide-dialog">
     <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
     <h2>Keyboard</h2>
@@ -266,19 +286,12 @@ Z X C V B N M , . /   ← lower octave</pre>
       </div>
       <div>
         <h3>Editing</h3>
+        <ul id="help-keys" class="help-keys"></ul>
         <ul>
-          <li><kbd>Space</kbd> edit mode on/off (stops playback)</li>
-          <li><kbd>Enter</kbd> play song · <kbd>Shift+Enter</kbd> play pattern · <kbd>Esc</kbd> stop</li>
-          <li><kbd>↑ ↓ ← →</kbd> move · <kbd>Tab</kbd> next channel · <kbd>PgUp/PgDn</kbd> jump 16 rows</li>
           <li><kbd>0–9 A–F</kbd> enter instrument / volume / effect values</li>
-          <li><kbd>Del</kbd> or <kbd>Backspace</kbd> clear field · with <kbd>Shift</kbd> clear the whole cell</li>
-          <li><kbd>Ins</kbd> insert row · <kbd>Ctrl/Cmd+Backspace</kbd> delete row (pulls the rows below up)</li>
-          <li><kbd>Shift+arrows</kbd> or drag to select · <kbd>Ctrl+C/X/V</kbd> copy/cut/paste</li>
-          <li><kbd>Ctrl+Z</kbd> undo · <kbd>Ctrl+Y</kbd> redo · <kbd>Ctrl+A</kbd> select pattern</li>
-          <li><kbd>Ctrl+↑/↓</kbd> select instrument · <kbd>Ctrl+←/→</kbd> previous/next order position</li>
-          <li><kbd>Alt+↑/↓</kbd> transpose selection or note</li>
-          <li>Click a channel header to mute, right-click to solo</li>
+          <li>Drag to select · click a channel header to mute, right-click to solo</li>
         </ul>
+        <p><button type="button" data-action="settings">Change keys…</button></p>
       </div>
       <div>
         <h3>Effects</h3>

@@ -13,6 +13,8 @@ import { initSongsDialog } from './ui/songs-dialog.js';
 import { initPlaylists } from './ui/playlists.js';
 import { idbGet, idbSet, local, newDraftId, putDraft, deleteDraft } from './storage.js';
 import { api } from './api.js';
+import { actionFor } from './keymap.js';
+import { initSettings } from './ui/settings.js';
 
 const $ = (sel) => document.querySelector(sel);
 const HEX = '0123456789ABCDEF';
@@ -82,6 +84,7 @@ class App {
     });
     this.songsDialog = initSongsDialog(this);
     this.playlists = initPlaylists(this);
+    this.settings = initSettings(this);
 
     const saved = await idbGet('autosave');
     let restored = false;
@@ -841,7 +844,8 @@ class App {
       new: () => this.switchSong(newSong()),
       open: () => $('#file-song').click(),
       demo: () => this.switchSong(demoSong()),
-      help: () => $('#help-dialog').showModal(),
+      help: () => { this.settings.fillHelp(); $('#help-dialog').showModal(); },
+      settings: () => this.settings.open(),
       'download-xm': () => this.download('xm'),
       'download-mod': () => this.download('mod'),
       'save-cloud': () => this.saveCloud(false),
@@ -870,7 +874,7 @@ class App {
       if (a.startsWith('order-') || a.startsWith('pattern-') || a === 'set-restart') this.orderAction(a);
       else actions[a]?.();
       btn.closest('.dropdown')?.classList.remove('open');
-      if (!btn.closest('dialog') && !['open', 'load-sample', 'help', 'my-songs', 'playlists'].includes(a)) $('#pattern').focus();
+      if (!btn.closest('dialog') && !['open', 'load-sample', 'help', 'my-songs', 'playlists', 'settings'].includes(a)) $('#pattern').focus();
     });
 
     // dropdown
@@ -1021,91 +1025,16 @@ class App {
       return;
     }
     const st = this.state;
-    const mod = e.ctrlKey || e.metaKey;
     const code = e.code;
 
-    // --- global shortcuts
-    if (mod && !e.altKey) {
-      const k = e.key.toLowerCase();
-      const handled = {
-        z: () => (e.shiftKey ? this.applyHistory(this.redo, this.undo) : this.applyHistory(this.undo, this.redo)),
-        y: () => this.applyHistory(this.redo, this.undo),
-        c: () => this.copySelection(false),
-        x: () => this.copySelection(true),
-        v: () => this.paste(),
-        a: () => { st.selection = { pattern: st.pattern, r0: 0, c0: 0, r1: this.pat.rows - 1, c1: this.song.channels - 1 }; this.editor.invalidate(); },
-        s: () => (this.user ? this.saveCloud(false) : this.download('xm')),
-        o: () => $('#file-song').click(),
-        arrowup: () => this.selectInstrument(st.instrument - 1),
-        arrowdown: () => this.selectInstrument(st.instrument + 1),
-        arrowleft: () => this.gotoOrder(st.order - 1),
-        arrowright: () => this.gotoOrder(st.order + 1),
-        backspace: () => st.edit && this.insertRow(true),
-      }[k];
-      if (handled) { e.preventDefault(); handled(); }
-      return;
-    }
-
-    if (e.altKey && (code === 'ArrowUp' || code === 'ArrowDown')) {
+    const action = actionFor(e);
+    if (action) {
       e.preventDefault();
-      if (st.edit) this.transpose(code === 'ArrowUp' ? (e.shiftKey ? 12 : 1) : (e.shiftKey ? -12 : -1));
+      this.runKeyAction(action, e);
       return;
     }
-
-    const fkey = /^F([1-8])$/.exec(code);
-    if (fkey) { e.preventDefault(); st.octave = +fkey[1] - 1; $('#edit-octave').value = st.octave; this.updatePosition(); return; }
-
-    switch (code) {
-      case 'Space':
-        e.preventDefault();
-        if (e.repeat) return;
-        if (this.engine.playing) this.stop();
-        else { st.edit = !st.edit; this.updatePosition(); this.editor.invalidate(); }
-        return;
-      case 'Enter': case 'NumpadEnter':
-        e.preventDefault();
-        if (!e.repeat) this.play(e.shiftKey ? 'pattern' : 'song');
-        return;
-      case 'Escape':
-        e.preventDefault();
-        if (st.selection) { st.selection = null; this.editor.invalidate(); }
-        else this.stop();
-        return;
-      case 'ArrowUp': case 'ArrowDown': {
-        e.preventDefault();
-        const d = code === 'ArrowUp' ? -1 : 1;
-        if (e.shiftKey) this.extendSelection(d, 0);
-        else { st.selection = null; this.moveRow(d, true); }
-        return;
-      }
-      case 'ArrowLeft': case 'ArrowRight': {
-        e.preventDefault();
-        const d = code === 'ArrowLeft' ? -1 : 1;
-        if (e.shiftKey) this.extendSelection(0, d);
-        else this.moveCol(d);
-        return;
-      }
-      case 'Tab':
-        e.preventDefault();
-        this.moveChannel(e.shiftKey ? -1 : 1);
-        return;
-      case 'PageUp': case 'PageDown':
-        e.preventDefault();
-        if (e.shiftKey) this.extendSelection(code === 'PageUp' ? -16 : 16, 0);
-        else this.moveRow(code === 'PageUp' ? -16 : 16, false);
-        return;
-      case 'Home': e.preventDefault(); this.setCursor({ row: 0 }); return;
-      case 'End': e.preventDefault(); this.setCursor({ row: this.pat.rows - 1 }); return;
-      // Backspace works like Delete (Mac keyboards have no Delete key); Ctrl/Cmd+Backspace deletes the row.
-      case 'Delete': case 'Backspace':
-        e.preventDefault();
-        if (st.edit || st.selection) this.clearField(e.shiftKey);
-        return;
-      case 'Insert':
-        e.preventDefault();
-        if (st.edit) this.insertRow(false);
-        return;
-    }
+    // Other Ctrl/Cmd/Alt combos are left to the browser (and never play notes).
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
 
     if (st.col === 0) {
       if (KEYOFF_KEYS.has(code)) {
@@ -1132,6 +1061,63 @@ class App {
       const note = st.octave * 12 + NOTE_KEYS[code] + 1;
       if (note <= 96) this.noteDown(code, note);
     }
+  }
+
+  runKeyAction(id, e) {
+    const st = this.state;
+    const octave = /^octave(\d)$/.exec(id);
+    if (octave) { st.octave = +octave[1]; $('#edit-octave').value = st.octave; this.updatePosition(); return; }
+    const once = (f) => () => { if (!e.repeat) f(); };
+    const selAll = () => { st.selection = { pattern: st.pattern, r0: 0, c0: 0, r1: this.pat.rows - 1, c1: this.song.channels - 1 }; this.editor.invalidate(); };
+    const move = (f) => () => { st.selection = null; f(); };
+    ({
+      playSong: once(() => this.play('song')),
+      playFromRow: once(() => this.play('song', { order: st.order, row: st.row })),
+      playPattern: once(() => this.play('pattern')),
+      stopOrEdit: once(() => {
+        if (this.engine.playing) this.stop();
+        else { st.edit = !st.edit; this.updatePosition(); this.editor.invalidate(); }
+      }),
+      stop: () => {
+        if (st.selection) { st.selection = null; this.editor.invalidate(); } else this.stop();
+      },
+      clearField: () => { if (st.edit || st.selection) this.clearField(false); },
+      clearCell: () => { if (st.edit || st.selection) this.clearField(true); },
+      insertSpace: () => { if (st.edit) this.insertRow(false); },
+      deleteAbove: () => { if (st.edit) this.insertRow(true); },
+      transposeUp: () => { if (st.edit) this.transpose(1); },
+      transposeDown: () => { if (st.edit) this.transpose(-1); },
+      octaveUp: () => { if (st.edit) this.transpose(12); },
+      octaveDown: () => { if (st.edit) this.transpose(-12); },
+      undo: () => this.applyHistory(this.undo, this.redo),
+      redo: () => this.applyHistory(this.redo, this.undo),
+      up: move(() => this.moveRow(-1, true)),
+      down: move(() => this.moveRow(1, true)),
+      left: () => this.moveCol(-1),
+      right: () => this.moveCol(1),
+      nextChannel: () => this.moveChannel(1),
+      prevChannel: () => this.moveChannel(-1),
+      pageUp: () => this.moveRow(-16, false),
+      pageDown: () => this.moveRow(16, false),
+      top: () => this.setCursor({ row: 0 }),
+      bottom: () => this.setCursor({ row: this.pat.rows - 1 }),
+      prevOrder: () => this.gotoOrder(st.order - 1),
+      nextOrder: () => this.gotoOrder(st.order + 1),
+      prevInstrument: () => this.selectInstrument(st.instrument - 1),
+      nextInstrument: () => this.selectInstrument(st.instrument + 1),
+      selUp: () => this.extendSelection(-1, 0),
+      selDown: () => this.extendSelection(1, 0),
+      selLeft: () => this.extendSelection(0, -1),
+      selRight: () => this.extendSelection(0, 1),
+      selPageUp: () => this.extendSelection(-16, 0),
+      selPageDown: () => this.extendSelection(16, 0),
+      selectAll: selAll,
+      copy: () => this.copySelection(false),
+      cut: () => this.copySelection(true),
+      paste: () => this.paste(),
+      save: () => (this.user ? this.saveCloud(false) : this.download('xm')),
+      open: () => $('#file-song').click(),
+    })[id]?.();
   }
 
   noteDown(code, note) {
