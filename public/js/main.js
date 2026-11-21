@@ -122,6 +122,7 @@ class App {
     st.pattern = song.orders[0] ?? 0;
     ensurePattern(song, st.pattern);
     st.row = 0; st.ch = 0; st.col = 0; st.selection = null;
+    this.editor?.revealCursor();
     st.instrument = 1; st.sample = 0;
     this.mutes = new Array(song.channels).fill(false);
     this.undo = []; this.redo = [];
@@ -157,6 +158,7 @@ class App {
 
   /** The user changed the song. */
   changed() {
+    this.editor?.revealCursor();
     if (this.listening) return;
     this.dirty = true;
     if (!this.draftId) this.draftId = newDraftId();
@@ -423,6 +425,8 @@ class App {
     if (row !== undefined) st.row = Math.max(0, Math.min(this.pat.rows - 1, row));
     if (ch !== undefined) st.ch = Math.max(0, Math.min(this.song.channels - 1, ch));
     if (col !== undefined) st.col = col;
+    // Moving sideways (keys, clicks) brings the cursor into view; scrolling rows keeps the view where it is.
+    if (ch !== undefined || col !== undefined) this.editor.revealCursor();
     this.editor.invalidate();
     this.updatePosition();
   }
