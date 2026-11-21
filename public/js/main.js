@@ -1040,6 +1040,7 @@ class App {
         arrowdown: () => this.selectInstrument(st.instrument + 1),
         arrowleft: () => this.gotoOrder(st.order - 1),
         arrowright: () => this.gotoOrder(st.order + 1),
+        backspace: () => st.edit && this.insertRow(true),
       }[k];
       if (handled) { e.preventDefault(); handled(); }
       return;
@@ -1095,17 +1096,14 @@ class App {
         return;
       case 'Home': e.preventDefault(); this.setCursor({ row: 0 }); return;
       case 'End': e.preventDefault(); this.setCursor({ row: this.pat.rows - 1 }); return;
-      case 'Delete':
+      // Backspace works like Delete (Mac keyboards have no Delete key); Ctrl/Cmd+Backspace deletes the row.
+      case 'Delete': case 'Backspace':
         e.preventDefault();
         if (st.edit || st.selection) this.clearField(e.shiftKey);
         return;
       case 'Insert':
         e.preventDefault();
         if (st.edit) this.insertRow(false);
-        return;
-      case 'Backspace':
-        e.preventDefault();
-        if (st.edit) this.insertRow(true);
         return;
     }
 
