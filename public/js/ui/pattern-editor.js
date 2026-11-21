@@ -75,6 +75,7 @@ export class PatternEditor {
       vu: cssVar('--pe-vu', '#5ef2a0'),
       sep: cssVar('--pe-sep', '#262e58'),
       play: cssVar('--pe-play', 'rgba(94,242,160,0.18)'),
+      boundary: cssVar('--pe-boundary', '#ff6fb5'),
     };
   }
 
@@ -92,7 +93,9 @@ export class PatternEditor {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.fontSize = this.width < 520 ? 12 : 14;
     this.rowH = this.fontSize + 3;
-    this.ctx.font = `${this.fontSize}px ${cssVar('--mono', 'ui-monospace, Menlo, Consolas, monospace')}`;
+    this.fontFamily = cssVar('--mono', 'ui-monospace, Menlo, Consolas, monospace');
+    this.font = `${this.fontSize}px ${this.fontFamily}`;
+    this.ctx.font = this.font;
     this.charW = Math.ceil(this.ctx.measureText('0').width * 10) / 10;
     this.invalidate();
   }
@@ -132,6 +135,32 @@ export class PatternEditor {
 
   chX(ch) { return this.rowNumW + ch * this.chW - this.scrollX; }
 
+  /**
+   * What line `i` rows from the cursor shows: { order, pattern, row, rows } or null.
+   * In continuous view it runs on into the next/previous order positions.
+   */
+  lineAt(i) {
+    const { song, state: st } = this.app;
+    const rowsOf = (o) => song.patterns[song.orders[o]]?.rows ?? 0;
+    let order = st.order, row = st.row + i;
+    if (!this.app.continuous) {
+      const rows = song.patterns[st.pattern]?.rows ?? 0;
+      return row >= 0 && row < rows ? { order, pattern: st.pattern, row, rows } : null;
+    }
+    while (row >= rowsOf(order)) {
+      row -= rowsOf(order);
+      if (++order >= song.orders.length) return null;
+    }
+    while (row < 0) {
+      if (--order < 0) return null;
+      row += rowsOf(order);
+    }
+    // the cursor's own line always belongs to the pattern being edited
+    const pattern = order === st.order ? st.pattern : song.orders[order];
+    if (!song.patterns[pattern]) return null;
+    return { order, pattern, row, rows: song.patterns[pattern].rows };
+  }
+
   /** Scrollbar geometry: track x/width and thumb x/width. */
   scrollbar() {
     const x = this.rowNumW, w = this.width - x - 2;
@@ -168,19 +197,28 @@ export class PatternEditor {
     const x0 = this.rowNumW;
     const textOff = Math.round((rh - this.fontSize) / 2 + this.fontSize * 0.8);
     const sel = st.selection;
-    const playRow = app.engine.playing && app.playPos && app.playPos.pattern === st.pattern && !st.followActive ? app.playPos.row : -1;
+    const pp = app.engine.playing && app.playPos && !st.followActive ? app.playPos : null;
+    const n = song.channels;
+
+    // Which order position / pattern / row each visible line shows. In continuous view the
+    // neighbouring order positions are shown above and below the current pattern.
+    const lines = [];
+    for (let i = -rowsAbove; i <= rowsBelow; i++) {
+      const L = this.lineAt(i);
+      if (L) lines.push({ i, y: centerY + i * rh, ...L });
+    }
 
     // row backgrounds
-    for (let i = -rowsAbove; i <= rowsBelow; i++) {
-      const r = st.row + i;
-      if (r < 0 || r >= pat.rows) continue;
-      const y = centerY + i * rh;
+    for (const L of lines) {
+      const r = L.row;
       let bg = null;
-      if (i === 0) bg = st.edit ? C.editRow : C.cursorRow;
+      if (L.i === 0) bg = st.edit ? C.editRow : C.cursorRow;
       else if (r % 16 === 0) bg = C.bar;
       else if (r % 4 === 0) bg = C.beat;
-      if (bg) { ctx.fillStyle = bg; ctx.fillRect(0, y, W, rh); }
-      if (r === playRow) { ctx.fillStyle = C.play; ctx.fillRect(0, y, W, rh); }
+      if (bg) { ctx.fillStyle = bg; ctx.fillRect(0, L.y, W, rh); }
+      if (pp && pp.row === r && (pp.order === L.order || (L.order === st.order && pp.pattern === L.pattern))) {
+        ctx.fillStyle = C.play; ctx.fillRect(0, L.y, W, rh);
+      }
     }
 
     // channel area is clipped so partly scrolled channels don't spill over the row numbers
@@ -189,7 +227,7 @@ export class PatternEditor {
     ctx.rect(x0 - cw * 0.5, 0, W - x0 + cw * 0.5, H);
     ctx.clip();
 
-    // selection
+    // selection (only in the current pattern)
     if (sel && sel.pattern === st.pattern) {
       const r0 = Math.min(sel.r0, sel.r1), r1 = Math.max(sel.r0, sel.r1);
       const c0 = Math.min(sel.c0, sel.c1), c1 = Math.max(sel.c0, sel.c1);
@@ -204,16 +242,14 @@ export class PatternEditor {
       }
     }
 
-    // cells
-    const n = song.channels;
-    const d = pat.data;
-    for (let i = -rowsAbove; i <= rowsBelow; i++) {
-      const r = st.row + i;
-      if (r < 0 || r >= pat.rows) continue;
-      const y = centerY + i * rh + textOff;
+    // cells; other patterns than the current one are drawn a bit faded
+    for (const L of lines) {
+      const d = song.patterns[L.pattern].data;
+      const y = L.y + textOff;
+      ctx.globalAlpha = L.order === st.order ? 1 : 0.55;
       for (let k = 0; k < count; k++) {
         const ch = first + k;
-        const o = (r * n + ch) * CELL;
+        const o = (L.row * n + ch) * CELL;
         const x = this.chX(ch);
         const note = d[o], ins = d[o + 1], vol = d[o + 2], fx = d[o + 3], par = d[o + 4];
         ctx.fillStyle = note === NOTE_OFF ? C.off : note ? C.note : C.dim;
@@ -227,6 +263,7 @@ export class PatternEditor {
         ctx.fillText(hasFx ? FX_CHARS[fx] + hex2(par) : '···', x + cw * 10, y);
       }
     }
+    ctx.globalAlpha = 1;
 
     // channel separators
     ctx.fillStyle = C.sep;
@@ -243,12 +280,28 @@ export class PatternEditor {
     ctx.restore();
 
     // row numbers
-    for (let i = -rowsAbove; i <= rowsBelow; i++) {
-      const r = st.row + i;
-      if (r < 0 || r >= pat.rows) continue;
-      ctx.fillStyle = r % 4 === 0 ? C.headerText : C.rowNum;
-      ctx.fillText(String(r).padStart(pat.rows > 100 ? 3 : 2, '0'), cw * 0.5, centerY + i * rh + textOff);
+    for (const L of lines) {
+      ctx.globalAlpha = L.order === st.order ? 1 : 0.55;
+      ctx.fillStyle = L.row % 4 === 0 ? C.headerText : C.rowNum;
+      ctx.fillText(String(L.row).padStart(L.rows > 100 ? 3 : 2, '0'), cw * 0.5, L.y + textOff);
     }
+    ctx.globalAlpha = 1;
+
+    // pattern boundaries: a line where a pattern starts, with its order position and pattern number
+    ctx.font = `${Math.max(9, this.fontSize - 3)}px ${this.fontFamily}`;
+    for (const L of lines) {
+      if (!app.continuous || L.row !== 0 || L.y <= top) continue;
+      ctx.fillStyle = C.boundary;
+      ctx.fillRect(0, L.y - 1, W, 2);
+      const label = `pos ${String(L.order).padStart(2, '0')} · pat ${String(L.pattern).padStart(2, '0')}`;
+      // The tag goes on the faded side of the line, so it never hides notes in the pattern being edited.
+      const tw = ctx.measureText(label).width + 8, th = Math.max(11, this.fontSize - 1);
+      const ty = L.order === st.order ? L.y - th : L.y;
+      ctx.fillRect(W - tw - 6, ty, tw, th);
+      ctx.fillStyle = C.bg;
+      ctx.fillText(label, W - tw - 2, ty + th - 3);
+    }
+    ctx.font = this.font;
 
     // header
     ctx.fillStyle = C.header;
@@ -365,6 +418,13 @@ export class PatternEditor {
       const h = this.hit(e);
       if (!this.app.state.selection) {
         // simple click: move cursor to the clicked row
+        // a click on a line of the next/previous pattern (continuous view) moves there
+        const L = this.lineAt(h.row - this.app.state.row);
+        if (L && L.order !== this.app.state.order) {
+          this.app.gotoOrder(L.order);
+          this.app.setCursor({ row: L.row });
+          return;
+        }
         const pat = this.app.song.patterns[this.app.state.pattern];
         this.app.setCursor({ row: Math.max(0, Math.min(pat.rows - 1, h.row)) });
       }
@@ -384,7 +444,7 @@ export class PatternEditor {
         const steps = Math.trunc(this.wheelY / this.rowH);
         if (steps) {
           this.wheelY -= steps * this.rowH;
-          this.app.setCursor({ row: this.app.state.row + steps });
+          this.app.moveRow(steps, false);
         }
       }
     }, { passive: false });

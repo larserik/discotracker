@@ -58,6 +58,7 @@ class App {
     };
     this.mutes = [];
     this.playPos = null;
+    this.continuous = local.get('dt.continuous') !== '0';
     this.undo = [];
     this.redo = [];
     this.clipboard = null;
@@ -440,8 +441,32 @@ class App {
   }
 
   moveRow(d, wrap = true) {
+    const st = this.state;
+    if (this.continuous) {
+      // Run on into the next/previous order position, like one long pattern.
+      const s = this.song;
+      const rowsOf = (o) => s.patterns[s.orders[o]]?.rows || 64;
+      let order = st.order, row = st.row + d;
+      while (row >= rowsOf(order)) {
+        if (order + 1 >= s.orders.length) {
+          if (!wrap) { row = rowsOf(order) - 1; break; }
+          row -= rowsOf(order); order = 0; continue;
+        }
+        row -= rowsOf(order); order++;
+      }
+      while (row < 0) {
+        if (order === 0) {
+          if (!wrap) { row = 0; break; }
+          order = s.orders.length - 1; row += rowsOf(order); continue;
+        }
+        order--; row += rowsOf(order);
+      }
+      if (order !== st.order) this.gotoOrder(order);
+      this.setCursor({ row });
+      return;
+    }
     const rows = this.pat.rows;
-    let r = this.state.row + d;
+    let r = st.row + d;
     if (wrap) r = ((r % rows) + rows) % rows;
     this.setCursor({ row: r });
   }
@@ -936,6 +961,12 @@ class App {
     });
     num($('#edit-octave'), 0, 7, (v) => { this.state.octave = v; this.updatePosition(); });
     num($('#edit-step'), 0, 16, (v) => { this.state.step = v; });
+    $('#continuous').checked = this.continuous;
+    $('#continuous').addEventListener('change', (e) => {
+      this.continuous = e.target.checked;
+      local.set('dt.continuous', this.continuous ? '1' : '0');
+      this.editor.invalidate();
+    });
     $('#follow').addEventListener('change', (e) => { this.state.follow = e.target.checked; this.state.followActive = e.target.checked && this.engine.playing; });
     const vol = $('#master-volume');
     const savedVol = local.get('dt.volume');

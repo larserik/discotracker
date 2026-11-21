@@ -37,6 +37,7 @@
   --pe-vu: #5ef2a0;
   --pe-sep: #262e58;
   --pe-play: rgba(94, 242, 160, 0.16);
+  --pe-boundary: #ff6fb5;
   color-scheme: dark;
 }
 
@@ -77,6 +78,7 @@
     --pe-vu: #19a862;
     --pe-sep: #dfe2ee;
     --pe-play: rgba(25, 168, 98, 0.14);
+    --pe-boundary: #d42b7d;
     color-scheme: light;
   }
 }
