@@ -259,9 +259,23 @@
     <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
     <h2>Settings</h2>
     <div class="tabs" role="tablist">
-      <button type="button" role="tab" class="tab active" aria-selected="true" data-tab="keys">Keyboard</button>
+      <button type="button" role="tab" class="tab active" aria-selected="true" data-tab="editor">Editor</button>
+      <button type="button" role="tab" class="tab" aria-selected="false" data-tab="keys">Keyboard</button>
     </div>
-    <section class="tab-panel" data-panel="keys">
+    <section class="tab-panel" data-panel="editor">
+      <label class="check setting">
+        <input type="checkbox" id="set-continuous">
+        <span><b>Continuous patterns</b><br>
+        <span class="muted">Show the end of the previous and the start of the next pattern in the song, and edit across them as if they were one long pattern. Enter and Backspace in edit mode then also move the notes in the following patterns.</span></span>
+      </label>
+      <label class="check setting">
+        <input type="checkbox" id="set-follow">
+        <span><b>Follow playback</b><br>
+        <span class="muted">The pattern editor scrolls along with the music while playing.</span></span>
+      </label>
+      <p class="muted">Saved in this browser. Both can also be switched under Editing on the left.</p>
+    </section>
+    <section class="tab-panel" data-panel="keys" hidden>
       <div class="keys-head">
         <p class="muted">Click <b>+</b> and press the keys you want. A key can only do one thing, so it is moved from any other action. The piano keys and hex values (0–9, A–F) are fixed. Saved in this browser.</p>
         <input type="search" id="keys-filter" placeholder="Find an action…" aria-label="Find an action">
@@ -292,7 +306,7 @@ Z X C V B N M , . /   ← lower octave</pre>
           <li><kbd>0–9 A–F</kbd> enter instrument / volume / effect values</li>
           <li>Drag to select · click a channel header to mute, right-click to solo</li>
         </ul>
-        <p><button type="button" data-action="settings">Change keys…</button></p>
+        <p><button type="button" data-action="settings-keys">Change keys…</button></p>
       </div>
       <div>
         <h3>Effects</h3>

@@ -95,6 +95,23 @@ export function initSettings(app) {
     render();
   });
 
+  // ---- tabs
+  const tabs = [...dialog.querySelectorAll('.tab')];
+  function showTab(name) {
+    for (const t of tabs) { const on = t.dataset.tab === name; t.classList.toggle('active', on); t.setAttribute('aria-selected', on); }
+    for (const p of dialog.querySelectorAll('.tab-panel')) p.hidden = p.dataset.panel !== name;
+    if (name === 'keys') render();
+  }
+  tabs.forEach((t) => t.addEventListener('click', () => { stopCapture(); showTab(t.dataset.tab); }));
+
+  // ---- editor settings: the same switches as under Editing on the left, kept in step
+  const mirror = (setId, panelId) => {
+    const a = $(setId), b = $(panelId);
+    a.addEventListener('change', () => { b.checked = a.checked; b.dispatchEvent(new Event('change')); });
+    return () => { a.checked = b.checked; };
+  };
+  const syncSwitches = [mirror('#set-continuous', '#continuous'), mirror('#set-follow', '#follow')];
+
   function fillHelp() {
     $('#help-keys').replaceChildren(...HELP.map(([id, text]) => {
       const keys = keysFor(id);
@@ -106,9 +123,10 @@ export function initSettings(app) {
   onKeymapChange(fillHelp);
 
   return {
-    open() {
+    open(tab = 'editor') {
       $('#help-dialog').open && $('#help-dialog').close();
-      render();
+      syncSwitches.forEach((f) => f());
+      showTab(tab);
       dialog.showModal();
     },
     fillHelp,

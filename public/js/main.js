@@ -506,9 +506,10 @@ class App {
   // ------------------------------------------------------------------
   // Pattern editing
 
+  /** Save pattern(s) before a change; several patterns changed at once are undone in one step. */
   pushUndo(patIdx = this.state.pattern) {
-    const p = this.song.patterns[patIdx];
-    this.undo.push({ pattern: patIdx, rows: p.rows, data: p.data.slice() });
+    const snap = (i) => ({ pattern: i, rows: this.song.patterns[i].rows, data: this.song.patterns[i].data.slice() });
+    this.undo.push(Array.isArray(patIdx) ? { group: patIdx.map(snap) } : snap(patIdx));
     if (this.undo.length > 200) this.undo.shift();
     this.redo = [];
   }
@@ -517,12 +518,17 @@ class App {
     const e = from.pop();
     if (!e) return;
     const s = this.song;
-    if (!s.patterns[e.pattern]) return;
-    const cur = s.patterns[e.pattern];
-    to.push({ pattern: e.pattern, rows: cur.rows, data: cur.data.slice() });
-    s.patterns[e.pattern] = { rows: e.rows, data: e.data };
-    this.engine.setPattern(e.pattern, s.patterns[e.pattern]);
-    if (this.state.pattern === e.pattern) this.setCursor({ row: this.state.row });
+    const back = [];
+    for (const x of e.group || [e]) {
+      if (!s.patterns[x.pattern]) continue;
+      const cur = s.patterns[x.pattern];
+      back.push({ pattern: x.pattern, rows: cur.rows, data: cur.data.slice() });
+      s.patterns[x.pattern] = { rows: x.rows, data: x.data };
+      this.engine.setPattern(x.pattern, s.patterns[x.pattern]);
+    }
+    if (!back.length) return;
+    to.push(e.group ? { group: back } : back[0]);
+    this.setCursor({ row: this.state.row });
     this.refreshSongPanel();
     this.editor.invalidate();
     this.changed();
@@ -616,20 +622,51 @@ class App {
     this.advance();
   }
 
+  /**
+   * Insert an empty cell at the cursor (push down) or remove the cell above it (pull up and
+   * move up) in the cursor's channel. In continuous mode the following order positions take
+   * part, as if the song were one long pattern: notes move across pattern boundaries. The chain
+   * stops before a pattern that is already in it (the same pattern used twice in the song).
+   */
   insertRow(remove = false) {
-    const st = this.state, p = this.pat;
-    this.pushUndo();
-    const d = p.data;
+    const st = this.state, s = this.song;
+    let order = st.order, row = st.row;
     if (remove) {
-      if (st.row === 0) return;
-      for (let r = st.row - 1; r < p.rows - 1; r++) d.copyWithin(this.cellOffset(r, st.ch), this.cellOffset(r + 1, st.ch), this.cellOffset(r + 1, st.ch) + CELL);
-      d.fill(0, this.cellOffset(p.rows - 1, st.ch), this.cellOffset(p.rows - 1, st.ch) + CELL);
-      st.row--;
-    } else {
-      for (let r = p.rows - 1; r > st.row; r--) d.copyWithin(this.cellOffset(r, st.ch), this.cellOffset(r - 1, st.ch), this.cellOffset(r - 1, st.ch) + CELL);
-      d.fill(0, this.cellOffset(st.row, st.ch), this.cellOffset(st.row, st.ch) + CELL);
+      if (row > 0) row--;
+      else if (this.continuous && order > 0) { order--; row = (s.patterns[s.orders[order]]?.rows || 1) - 1; }
+      else return;
     }
-    this.patternChanged();
+    const chain = [order === st.order ? st.pattern : s.orders[order]];
+    if (this.continuous) {
+      for (let o = order + 1; o < s.orders.length; o++) {
+        const p = s.orders[o];
+        if (chain.includes(p) || !s.patterns[p]) break;
+        chain.push(p);
+      }
+    }
+    // One long column of cell offsets through the chain, starting at the edited row.
+    const cells = [];
+    chain.forEach((p, k) => {
+      for (let r = k === 0 ? row : 0; r < s.patterns[p].rows; r++) cells.push([s.patterns[p].data, this.cellOffset(r, st.ch)]);
+    });
+    this.pushUndo(chain.length > 1 ? chain : chain[0]);
+    const copy = ([dd, od], [ds, os]) => dd.set(ds.subarray(os, os + CELL), od);
+    if (remove) {
+      for (let k = 0; k < cells.length - 1; k++) copy(cells[k], cells[k + 1]);
+      const [d, o] = cells[cells.length - 1];
+      d.fill(0, o, o + CELL);
+    } else {
+      for (let k = cells.length - 1; k > 0; k--) copy(cells[k], cells[k - 1]);
+      const [d, o] = cells[0];
+      d.fill(0, o, o + CELL);
+    }
+    for (const p of chain) this.engine.setPattern(p, s.patterns[p]);
+    if (remove) {
+      if (order !== st.order) this.gotoOrder(order);
+      st.row = row;
+    }
+    this.editor.invalidate();
+    this.changed();
     this.updatePosition();
   }
 
@@ -883,6 +920,7 @@ class App {
       demo: () => this.switchSong(demoSong()),
       help: () => { this.settings.fillHelp(); $('#help-dialog').showModal(); },
       settings: () => this.settings.open(),
+      'settings-keys': () => this.settings.open('keys'),
       'download-xm': () => this.download('xm'),
       'download-mod': () => this.download('mod'),
       'save-cloud': () => this.saveCloud(false),
@@ -915,7 +953,7 @@ class App {
       if (a.startsWith('order-') || a.startsWith('pattern-') || a === 'set-restart') this.orderAction(a);
       else actions[a]?.();
       btn.closest('.dropdown')?.classList.remove('open');
-      if (!btn.closest('dialog') && !['open', 'load-sample', 'help', 'my-songs', 'playlists', 'settings'].includes(a)) $('#pattern').focus();
+      if (!btn.closest('dialog') && !['open', 'load-sample', 'help', 'my-songs', 'playlists', 'settings', 'settings-keys'].includes(a)) $('#pattern').focus();
     });
 
     // dropdown
@@ -967,7 +1005,13 @@ class App {
       local.set('dt.continuous', this.continuous ? '1' : '0');
       this.editor.invalidate();
     });
-    $('#follow').addEventListener('change', (e) => { this.state.follow = e.target.checked; this.state.followActive = e.target.checked && this.engine.playing; });
+    this.state.follow = local.get('dt.follow') !== '0';
+    $('#follow').checked = this.state.follow;
+    $('#follow').addEventListener('change', (e) => {
+      this.state.follow = e.target.checked;
+      this.state.followActive = e.target.checked && this.engine.playing;
+      local.set('dt.follow', e.target.checked ? '1' : '0');
+    });
     const vol = $('#master-volume');
     const savedVol = local.get('dt.volume');
     if (savedVol !== null) vol.value = savedVol;
