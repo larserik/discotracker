@@ -40,7 +40,13 @@ export function confirmDialog({ title = 'Are you sure?', message = '', confirmTe
     dlg.returnValue = '';
     dlg.addEventListener('close', () => {
       resolve(dlg.returnValue === 'ok');
-      if (back && document.contains(back)) back.focus?.();
+      // Give focus back quietly: no focus ring on the button that opened the box
+      // (until focus moves on, e.g. with Tab).
+      if (back && document.contains(back) && back.focus) {
+        back.classList.add('quiet-focus');
+        back.addEventListener('blur', () => back.classList.remove('quiet-focus'), { once: true });
+        back.focus();
+      }
     }, { once: true });
     dlg.showModal();
     // Enter confirms right away; for something destructive the safe choice has focus.

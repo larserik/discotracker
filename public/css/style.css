@@ -114,6 +114,7 @@ button.link { background: none; border: 0; padding: 2px 0; color: var(--muted); 
 button.active { background: var(--danger); border-color: var(--danger); color: #fff; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 canvas:focus, canvas:focus-visible { outline: none; }
+.quiet-focus:focus-visible { outline: none; }
 
 input[type="number"], input:not([type]), input[type="email"], select {
   background: var(--pe-bg);
@@ -443,5 +444,7 @@ body.editing .pattern-panel { box-shadow: inset 0 0 0 2px var(--danger); }
 .confirm-message { color: var(--muted); margin: 0 0 18px; line-height: 1.45; }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .confirm-actions button { min-width: 84px; }
+/* The button Enter will press is always marked, however the box was opened. */
+.confirm-actions button:focus { outline: 2px solid var(--focus); outline-offset: 2px; }
 @keyframes confirm-in { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .confirm-dialog[open] { animation: none; } }
