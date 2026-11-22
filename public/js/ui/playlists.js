@@ -29,14 +29,14 @@ const recent = {
   },
 };
 
+// Links (/p/<token>, /s/<token>) are opened by the router in explore.js.
 export function initPlaylists(app) {
   const player = initPlayer(app);
   const manager = initManager(app, (token) => player.open(token));
-  // A shared link: /p/<token>
-  const m = /^\/p\/([A-Za-z0-9_-]+)\/?$/.exec(location.pathname);
-  if (m) player.open(m[1]);
   return { manager, player };
 }
+
+const VIS_LABEL = { private: 'Private', link: 'Anyone with the link', public: 'Public' };
 
 // ---------------------------------------------------------------------------
 // Manager
@@ -95,8 +95,8 @@ function initManager(app, playerOpen) {
     else {
       const tb = el('tbody');
       for (const p of mine) {
-        const vis = p.visibility === 'public'
-          ? el('span', { className: 'badge public', textContent: 'Public' })
+        const vis = p.visibility !== 'private'
+          ? el('span', { className: `badge ${p.visibility}`, textContent: VIS_LABEL[p.visibility] })
           : el('span', { className: 'badge', textContent: p.shares ? `Shared with ${p.shares}` : 'Private' });
         tb.append(el('tr', {},
           el('td', { className: 'name', textContent: p.name }),
@@ -171,7 +171,13 @@ function initManager(app, playerOpen) {
   }
 
   const save = guard(async (data) => {
-    current = await api.updatePlaylist(current.id, data);
+    try {
+      current = await api.updatePlaylist(current.id, data);
+    } catch (e) {
+      renderEdit(); // e.g. the radio buttons back to how it is
+      if (e.needsHandle) { app.askForHandle('playlist'); return; }
+      throw e;
+    }
     renderEdit();
   });
   const setTracks = (ids) => save({ songIds: ids });
@@ -260,6 +266,7 @@ function initPlayer(app) {
   // editor behind the player. The user's own song is stashed meanwhile.
   const engine = app.engine;
   let stash = null; // the user's own song while listening: { song, serverSong, draftId, dirty, state, undo, redo, mutes }
+  let kind = 'playlist'; // or 'song': a single song from its link /s/<token>
   let token = null;
   let playlist = null;
   let index = -1;
@@ -280,15 +287,23 @@ function initPlayer(app) {
     if (t) $('#pp-now').textContent = `${t.name} · pos ${String(m.order).padStart(2, '0')} row ${String(m.row).padStart(2, '0')}`;
   });
 
+  const pathFor = (k, t) => `/${k === 'song' ? 's' : 'p'}/${t}`;
+
   function render() {
-    $('#pp-title').textContent = playlist?.name || 'Playlist';
-    const meta = [];
+    $('#pp-title').textContent = playlist?.name || (kind === 'song' ? 'Song' : 'Playlist');
+    const meta = []; // parts, each a list of nodes, shown joined with " · "
     if (playlist) {
-      meta.push(`${playlist.tracks.length} song${playlist.tracks.length === 1 ? '' : 's'}`);
-      if (playlist.owner) meta.push(`shared by ${playlist.owner}`);
-      if (playlist.access === 'owner') meta.push(playlist.visibility === 'public' ? 'public' : 'private');
+      if (kind === 'song') meta.push([playlist.tracks[0]?.format.toUpperCase() || 'Song']);
+      else meta.push([`${playlist.tracks.length} song${playlist.tracks.length === 1 ? '' : 's'}`]);
+      if (playlist.by && playlist.access !== 'owner') {
+        const { handle, name } = playlist.by;
+        meta.push(['by ', el('a', { href: `/@${handle}`, textContent: name !== handle ? `${name} @${handle}` : `@${handle}`,
+          onclick: (e) => { e.preventDefault(); closingFromHistory = true; dialog.close(); app.explore.openProfile(handle); } })]); // Back returns here
+      } else if (playlist.owner) meta.push([`shared by ${playlist.owner}`]);
+      if (playlist.plays) meta.push([`${playlist.plays} play${playlist.plays === 1 ? '' : 's'}`]);
+      if (playlist.access === 'owner') meta.push([VIS_LABEL[playlist.visibility]?.toLowerCase() || '']);
     }
-    $('#pp-meta').textContent = meta.join(' · ');
+    $('#pp-meta').replaceChildren(...meta.flatMap((part, i) => (i ? [' · ', ...part] : part)));
     $('#pp-desc').textContent = playlist?.description || '';
     const list = $('#pp-tracks');
     list.replaceChildren();
@@ -315,7 +330,7 @@ function initPlayer(app) {
 
   async function fetchSong(i) {
     const t = playlist.tracks[i];
-    if (!cache.has(t.id)) cache.set(t.id, await api.getSharedSong(token, t.id));
+    if (!cache.has(t.id)) cache.set(t.id, await (kind === 'song' ? api.getPublicSongData(token) : api.getSharedSong(token, t.id)));
     return cache.get(t.id);
   }
 
@@ -452,13 +467,18 @@ function initPlayer(app) {
     $('#pp-gate').hidden = true;
     $('#pp-body').hidden = false;
     try {
-      playlist = await api.openShared(token);
+      if (kind === 'song') {
+        const s = await api.getPublicSong(token);
+        playlist = { ...s, by: s.owner, owner: undefined, tracks: [{ id: s.id, name: s.name, format: s.format, size: s.size }] };
+      } else {
+        playlist = await api.openShared(token);
+        recent.add(playlist);
+      }
       if (index >= playlist.tracks.length) index = -1; // keep the place when coming back
-      recent.add(playlist);
       showChip();
       render();
     } catch (e) {
-      if (e.status === 404) { recent.remove(token); hideChip(); }
+      if (e.status === 404) { if (kind === 'playlist') recent.remove(token); hideChip(); }
       playlist = null;
       render();
       $('#pp-title').textContent = 'Playlist';
@@ -486,33 +506,38 @@ function initPlayer(app) {
       playing = false;
     }
     // Leaving the playlist is a new history entry, so Back returns to it.
+    // Opened from Explore or someone's page: back to that page.
     if (closingFromHistory) closingFromHistory = false;
-    else if (location.pathname.startsWith('/p/')) history.pushState(null, '', '/');
+    else if (/^\/[ps]\//.test(location.pathname)) history.pushState(null, '', app.explore?.returnUrl() || '/');
   });
 
-  // Back/Forward between "/" and "/p/<token>" opens and closes the player.
+  // Back/Forward: the router (explore.js) opens and closes the player.
   let closingFromHistory = false;
-  window.addEventListener('popstate', () => {
-    const m = /^\/p\/([A-Za-z0-9_-]+)\/?$/.exec(location.pathname);
-    if (m) open(m[1], { fromHistory: true });
-    else if (dialog.open) { closingFromHistory = true; dialog.close(); }
-  });
+  function closeFromHistory() {
+    if (dialog.open) { closingFromHistory = true; dialog.close(); }
+  }
   // After signing in from the gate, reopen the playlist.
-  app.onUserChange.push(() => { if (token && !playlist && !dialog.open) open(token); });
+  app.onUserChange.push(() => { if (token && !playlist && !dialog.open) openKind(kind, token); });
 
-  async function open(t, { fromHistory = false } = {}) {
-    if (token !== t) { cache.clear(); index = -1; }
+  async function openKind(k, t, { fromHistory = false, autoplay = false } = {}) {
+    if (token !== t || kind !== k) { cache.clear(); index = -1; }
+    kind = k;
     token = t;
-    if (!fromHistory && location.pathname !== `/p/${t}`) history.pushState(null, '', `/p/${t}`);
+    if (!fromHistory && location.pathname !== pathFor(k, t)) history.pushState(null, '', pathFor(k, t));
     if (!dialog.open) dialog.showModal();
     await load();
+    // A single song: ready to play, no list to choose from.
+    if (k === 'song' && playlist && index < 0) { index = 0; render(); }
+    if (autoplay && playlist?.tracks.length && !playing) play(index < 0 ? 0 : index);
   }
+  const open = (t, o) => openKind('playlist', t, o);
+  const openSong = (t, o) => openKind('song', t, o);
 
   // "♫ <playlist>" in the top bar: one click back to the playlist, e.g. after "Edit".
   const chip = $('#playlist-chip');
   function showChip() {
     chip.querySelector('span').textContent = playlist.name;
-    chip.title = `Back to the playlist "${playlist.name}"`;
+    chip.title = kind === 'song' ? `Back to "${playlist.name}"` : `Back to the playlist "${playlist.name}"`;
     chip.hidden = false;
   }
   function hideChip() { chip.hidden = true; }
@@ -523,7 +548,7 @@ function initPlayer(app) {
     clearTimeout(pulseChip.t);
     pulseChip.t = setTimeout(() => chip.classList.remove('attention'), 4000);
   }
-  chip.addEventListener('click', () => { if (token) open(token); });
+  chip.addEventListener('click', () => { if (token) openKind(kind, token); });
 
-  return { open };
+  return { open, openSong, closeFromHistory };
 }

@@ -1,8 +1,9 @@
-// Settings dialog. Tabs: Keyboard (more can be added later).
+// Settings dialog. Tabs: Editor, Keyboard, Profile (handle, name, bio; signed in only).
 import {
   ACTIONS, GROUPS, keysFor, isDefault, setKeys, resetKeys, resetAllKeys, comboFromEvent, formatCombo, onKeymapChange,
 } from '../keymap.js';
 import { confirmDialog } from './confirm.js';
+import { api } from '../api.js';
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, props = {}, ...children) => {
@@ -101,6 +102,7 @@ export function initSettings(app) {
     for (const t of tabs) { const on = t.dataset.tab === name; t.classList.toggle('active', on); t.setAttribute('aria-selected', on); }
     for (const p of dialog.querySelectorAll('.tab-panel')) p.hidden = p.dataset.panel !== name;
     if (name === 'keys') render();
+    if (name === 'profile') fillProfile();
   }
   tabs.forEach((t) => t.addEventListener('click', () => { stopCapture(); showTab(t.dataset.tab); }));
 
@@ -111,6 +113,72 @@ export function initSettings(app) {
     return () => { a.checked = b.checked; };
   };
   const syncSwitches = [mirror('#set-continuous', '#continuous'), mirror('#set-follow', '#follow')];
+
+  // ---- profile
+  const hIn = $('#profile-handle');
+  const hMsg = $('#profile-handle-msg');
+  let checkSeq = 0;
+  const cleanHandle = (v) => v.trim().replace(/^@/, '').toLowerCase();
+  function previewUrl() {
+    const h = cleanHandle(hIn.value);
+    $('#profile-url-preview').textContent = `${location.host}/@${h || '…'}`;
+  }
+  function fillProfile() {
+    const u = app.user;
+    if (!u) return;
+    hIn.value = u.handle || '';
+    $('#profile-name').value = u.name || '';
+    $('#profile-bio').value = u.bio || '';
+    $('#profile-view').hidden = !u.handle;
+    $('#profile-error').textContent = '';
+    hMsg.textContent = '';
+    hMsg.className = 'field-msg';
+    previewUrl();
+    if (!u.handle) setTimeout(() => hIn.focus(), 0);
+  }
+  let checkTimer = 0;
+  hIn.addEventListener('input', () => {
+    previewUrl();
+    clearTimeout(checkTimer);
+    const h = cleanHandle(hIn.value);
+    const my = ++checkSeq;
+    if (!h || h === app.user?.handle) { hMsg.textContent = ''; return; }
+    checkTimer = setTimeout(async () => {
+      try {
+        const r = await api.checkHandle(h);
+        if (my !== checkSeq) return;
+        hMsg.textContent = r.available ? `✓ @${h} is free` : r.error;
+        hMsg.className = `field-msg ${r.available ? 'ok' : 'bad'}`;
+      } catch { /* checked again on save */ }
+    }, 300);
+  });
+  $('#profile-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const handle = cleanHandle(hIn.value);
+    if (!handle && app.user?.handle && !(await confirmDialog({
+      title: `Remove the handle @${app.user.handle}?`,
+      message: 'Your page goes away and your public songs and playlists are no longer listed in Explore. Links to them keep working.',
+      confirmText: 'Remove handle', danger: true,
+    }))) return;
+    const btn = $('#profile-save');
+    btn.disabled = true;
+    try {
+      const { user } = await api.saveProfile({ handle, name: $('#profile-name').value, bio: $('#profile-bio').value });
+      app.auth.update(user);
+      fillProfile();
+      app.toast(user.handle ? `Saved. Your page: ${location.host}/@${user.handle}` : 'Saved');
+    } catch (err) {
+      $('#profile-error').textContent = err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  $('#profile-view').addEventListener('click', () => { const h = app.user?.handle; dialog.close(); if (h) app.explore.openProfile(h); });
+  // Signed out with the Profile tab showing: nothing to show there.
+  app.onUserChange.push((u) => {
+    if (!dialog.open) return;
+    if (!u && !dialog.querySelector('[data-panel="profile"]').hidden) showTab('editor');
+  });
 
   function fillHelp() {
     $('#help-keys').replaceChildren(...HELP.map(([id, text]) => {
@@ -125,6 +193,7 @@ export function initSettings(app) {
   return {
     open(tab = 'editor') {
       $('#help-dialog').open && $('#help-dialog').close();
+      if (tab === 'profile' && !app.user) { app.auth.open(); return; }
       syncSwitches.forEach((f) => f());
       showTab(tab);
       dialog.showModal();

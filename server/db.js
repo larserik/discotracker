@@ -1,9 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 const dataDir = process.env.DATA_DIR || path.resolve('data');
 fs.mkdirSync(dataDir, { recursive: true });
+
+/** Random id for share links: /p/<token>, /s/<token>. */
+export const newToken = () => crypto.randomBytes(12).toString('base64url');
 
 export const db = new DatabaseSync(path.join(dataDir, 'discotracker.sqlite'));
 
@@ -54,7 +58,7 @@ db.exec(`
     token       TEXT NOT NULL UNIQUE,           -- used in the share link /p/<token>
     name        TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
-    visibility  TEXT NOT NULL DEFAULT 'private', -- 'private' (owner + invited emails) | 'public' (anyone with the link)
+    visibility  TEXT NOT NULL DEFAULT 'private', -- 'private' (owner + invited emails) | 'link' (anyone with the link) | 'public' (listed: profile page and search)
     created_at  INTEGER NOT NULL,
     updated_at  INTEGER NOT NULL
   );
@@ -76,6 +80,52 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_playlist_shares_email ON playlist_shares(email);
 `);
+
+// ---------------------------------------------------------------------------
+// Migrations, run once each (PRAGMA user_version counts them).
+
+const MIGRATIONS = [
+  // 1: handles and profiles, public (listed) songs and playlists.
+  () => {
+    const cols = (t) => new Set(db.prepare(`PRAGMA table_info(${t})`).all().map((c) => c.name));
+    const add = (t, col, def) => { if (!cols(t).has(col)) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`); };
+    add('users', 'handle', 'TEXT');
+    add('users', 'display_name', "TEXT NOT NULL DEFAULT ''");
+    add('users', 'bio', "TEXT NOT NULL DEFAULT ''");
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users(handle) WHERE handle IS NOT NULL');
+
+    add('songs', 'token', 'TEXT');
+    add('songs', 'description', "TEXT NOT NULL DEFAULT ''");
+    add('songs', 'visibility', "TEXT NOT NULL DEFAULT 'private'"); // 'private' | 'link' | 'public'
+    add('songs', 'plays', 'INTEGER NOT NULL DEFAULT 0');
+    add('songs', 'published_at', 'INTEGER');
+    const setToken = db.prepare('UPDATE songs SET token = ? WHERE id = ?');
+    for (const { id } of db.prepare('SELECT id FROM songs WHERE token IS NULL').all()) setToken.run(newToken(), id);
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_songs_token ON songs(token)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_songs_public ON songs(visibility, published_at)');
+
+    add('playlists', 'plays', 'INTEGER NOT NULL DEFAULT 0');
+    add('playlists', 'published_at', 'INTEGER');
+    // "public" used to mean "anyone with the link". That is now "link"; "public" means listed.
+    db.exec("UPDATE playlists SET visibility = 'link' WHERE visibility = 'public'");
+    db.exec('CREATE INDEX IF NOT EXISTS idx_playlists_public ON playlists(visibility, published_at)');
+  },
+];
+
+{
+  const v = db.prepare('PRAGMA user_version').get().user_version;
+  for (let i = v; i < MIGRATIONS.length; i++) {
+    db.exec('BEGIN');
+    try {
+      MIGRATIONS[i]();
+      db.exec(`PRAGMA user_version = ${i + 1}`);
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      throw e;
+    }
+  }
+}
 
 export function cleanup() {
   const now = Date.now();

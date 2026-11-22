@@ -27,6 +27,7 @@
       </div>
       <button data-action="my-songs" title="Songs you are working on, and songs saved in your account">My songs</button>
       <button data-action="playlists" title="Your playlists and playlists you have opened">Playlists</button>
+      <button data-action="explore" title="Find songs, playlists and people">Explore</button>
       <button data-action="demo" title="Load the demo song">Demo</button>
       <button data-action="help" title="Keyboard help">Help</button>
     </nav>
@@ -52,6 +53,7 @@
         </button>
         <div class="dropdown-menu dropdown-right" role="menu">
           <div class="menu-header">Signed in as<strong id="menu-email"></strong></div>
+          <button data-action="my-page" id="menu-my-page" role="menuitem">My page</button>
           <button data-action="settings" role="menuitem">Settings…</button>
           <button id="logout-btn" role="menuitem">Sign out</button>
         </div>
@@ -214,7 +216,8 @@
         <div>
           <h3 class="pl-sub">Sharing</h3>
           <label class="check"><input type="radio" name="pl-vis" value="private"> Private – only people you invite (they sign in with that email)</label>
-          <label class="check"><input type="radio" name="pl-vis" value="public"> Public – anyone with the link can listen</label>
+          <label class="check"><input type="radio" name="pl-vis" value="link"> Anyone with the link can listen (not listed)</label>
+          <label class="check"><input type="radio" name="pl-vis" value="public"> Public – on your page and in Explore</label>
           <div class="btnrow pl-link">
             <input id="pl-link" readonly aria-label="Share link">
             <button id="pl-copy">Copy</button>
@@ -234,6 +237,43 @@
       </div>
     </section>
     <p class="error" id="pl-error" role="alert"></p>
+  </dialog>
+
+  <!-- Explore: search and browse, and people's pages (/@handle) -->
+  <dialog id="explore-dialog" class="dialog wide-dialog explore-dialog">
+    <form method="dialog" class="dialog-close"><button aria-label="Close">✕</button></form>
+    <section id="ex-browse">
+      <h2>Explore</h2>
+      <form id="ex-search" class="ex-search" role="search">
+        <input type="search" id="ex-q" placeholder="Search songs, playlists and people" aria-label="Search" autocomplete="off">
+        <button type="submit" class="primary">Search</button>
+      </form>
+      <div class="ex-bar">
+        <div class="tabs ex-tabs" role="tablist">
+          <button type="button" role="tab" class="tab active" data-type="songs">Songs</button>
+          <button type="button" role="tab" class="tab" data-type="playlists">Playlists</button>
+          <button type="button" role="tab" class="tab" data-type="people">People</button>
+        </div>
+        <label class="ex-sort">Sort
+          <select id="ex-sort"><option value="new">Newest</option><option value="popular">Most played</option></select>
+        </label>
+      </div>
+      <div id="ex-results" class="ex-results"></div>
+    </section>
+    <section id="ex-profile" hidden>
+      <button class="link" id="ex-back">← Explore</button>
+      <div class="ex-profile-head">
+        <div class="ex-avatar" id="exp-avatar" aria-hidden="true"></div>
+        <div>
+          <h2 id="exp-name"></h2>
+          <p class="muted" id="exp-meta"></p>
+          <p id="exp-bio" class="pp-desc"></p>
+        </div>
+        <button id="exp-edit" hidden>Edit profile</button>
+      </div>
+      <div id="exp-body"></div>
+    </section>
+    <p class="error" id="ex-error" role="alert"></p>
   </dialog>
 
   <!-- Playlist player -->
@@ -265,6 +305,7 @@
     <div class="tabs" role="tablist">
       <button type="button" role="tab" class="tab active" aria-selected="true" data-tab="editor">Editor</button>
       <button type="button" role="tab" class="tab" aria-selected="false" data-tab="keys">Keyboard</button>
+      <button type="button" role="tab" class="tab needs-user" aria-selected="false" data-tab="profile">Profile</button>
     </div>
     <section class="tab-panel" data-panel="editor">
       <label class="check setting">
@@ -286,6 +327,27 @@
       </div>
       <div id="keys-list" class="keys-list"></div>
       <div class="btnrow keys-foot"><button type="button" id="keys-reset-all" class="danger">Reset all to defaults</button></div>
+    </section>
+    <section class="tab-panel" data-panel="profile" hidden>
+      <form id="profile-form" class="profile-form" autocomplete="off">
+        <p class="muted">Your handle gives you a page, <b id="profile-url-preview">discotracker.com/@…</b>, where your public songs and playlists are listed. People see your handle and name, never your email.</p>
+        <label class="field wide">Handle
+          <span class="handle-input"><span>@</span><input id="profile-handle" maxlength="30" spellcheck="false" autocapitalize="off" placeholder="unicorn"></span>
+        </label>
+        <p id="profile-handle-msg" class="field-msg" aria-live="polite"></p>
+        <label class="field wide"><span>Name <span class="muted">(shown on your page; optional)</span></span>
+          <input id="profile-name" maxlength="50">
+        </label>
+        <label class="field wide"><span>About you <span class="muted">(optional)</span></span>
+          <textarea id="profile-bio" maxlength="500" rows="3"></textarea>
+        </label>
+        <div class="btnrow profile-actions">
+          <button type="submit" class="primary" id="profile-save">Save</button>
+          <button type="button" id="profile-view" hidden>View my page</button>
+        </div>
+        <p class="muted small">If you change your handle, links to your old page stop working. Song and playlist links keep working.</p>
+        <p class="error" id="profile-error" role="alert"></p>
+      </form>
     </section>
   </dialog>
 

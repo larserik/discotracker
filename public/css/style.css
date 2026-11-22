@@ -118,7 +118,7 @@ button.active { background: var(--danger); border-color: var(--danger); color: #
 canvas:focus, canvas:focus-visible { outline: none; }
 .quiet-focus:focus-visible { outline: none; }
 
-input[type="number"], input:not([type]), input[type="email"], select {
+input[type="number"], input:not([type]), input[type="email"], input[type="search"], select {
   background: var(--pe-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -455,3 +455,59 @@ body.editing .pattern-panel { box-shadow: inset 0 0 0 2px var(--danger); }
 .setting { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 14px; cursor: pointer; }
 .setting input { margin-top: 3px; flex: none; }
 .setting .muted { font-size: 13px; }
+
+/* Explore and people's pages */
+.explore-dialog { min-height: min(560px, 80vh); }
+.ex-search { display: flex; gap: 8px; margin-bottom: 10px; }
+.ex-search input { flex: 1; min-width: 0; }
+.ex-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; flex-wrap: wrap; }
+.ex-bar .tabs { border-bottom: 0; margin-bottom: 0; }
+.ex-sort { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; padding-bottom: 6px; }
+.ex-results { max-height: 58vh; overflow-y: auto; }
+.ex-list { list-style: none; margin: 0; padding: 0; }
+.ex-item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 4px; border-bottom: 1px solid var(--border); }
+.ex-item:last-child { border-bottom: 0; }
+.ex-person { cursor: pointer; }
+.ex-item:hover { background: var(--pe-beat); }
+.ex-play { flex: none; width: 36px; height: 36px; border-radius: 50%; padding: 0; font-size: 14px; }
+.ex-main { min-width: 0; flex: 1; }
+.ex-title { font-weight: 600; color: var(--text); text-decoration: none; word-break: break-word; }
+.ex-title:hover { text-decoration: underline; }
+.ex-kind { color: var(--accent); }
+.ex-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.ex-sub a.by, #pp-meta a { color: var(--accent-2); text-decoration: none; }
+.ex-sub a.by:hover, #pp-meta a:hover { text-decoration: underline; }
+.ex-desc { font-size: 13px; margin-top: 4px; white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ex-more { text-align: center; padding: 10px; }
+.ex-empty { padding: 24px 0; text-align: center; }
+.ex-profile-head { display: flex; gap: 16px; align-items: flex-start; margin: 10px 0 4px; }
+.ex-profile-head > div:nth-child(2) { flex: 1; min-width: 0; }
+.ex-profile-head h2 { margin: 0 0 2px; word-break: break-word; }
+.ex-profile-head .handle { font-weight: normal; font-size: 15px; }
+#exp-body { max-height: 52vh; overflow-y: auto; }
+.avatar { flex: none; display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; font-weight: 700;
+  background: hsl(var(--hue) 70% 45%); color: #fff; font-size: 16px; }
+.avatar.big { width: 64px; height: 64px; font-size: 28px; }
+
+/* Profile settings */
+.handle-input { display: flex; align-items: center; gap: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--pe-bg); }
+.handle-input span { padding: 0 2px 0 10px; color: var(--muted); font-size: 15px; }
+.dialog .handle-input input { border: 0; background: transparent; flex: 1; min-width: 0; padding-left: 2px; }
+.handle-input:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
+.field-msg { font-size: 12px; min-height: 1.2em; margin: -2px 0 6px; color: var(--muted); }
+.field-msg.ok { color: var(--accent-2); }
+.field-msg.bad { color: var(--danger); }
+.profile-form { max-width: 520px; }
+.profile-actions > * { flex: none; }
+.small { font-size: 12px; }
+
+/* Sharing a song in My songs */
+.sharing-ctl { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+.vis-select { font-size: 12px; padding: 2px 4px; width: auto; }
+.vis-select.vis-public { color: var(--accent-2); border-color: var(--accent-2); }
+.vis-select.vis-link { color: var(--accent-3); }
+.sharing-ctl button { padding: 2px 6px; }
+.songs-table .plays { font-weight: normal; font-size: 12px; }
+.badge.link { color: var(--accent-3); border-color: var(--accent-3); }
+@media (max-width: 600px) { .ex-profile-head { flex-wrap: wrap; } }
+.ex-sort select { width: auto; }

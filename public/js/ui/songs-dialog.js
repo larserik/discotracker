@@ -70,19 +70,55 @@ export function initSongsDialog(app) {
       el('button', { className: 'primary', textContent: 'Save the open song', onclick: run(async () => { await app.saveCloud(false); refresh(); }) }),
       el('button', { textContent: 'Save as new copy', onclick: run(async () => { await app.saveCloud(true); refresh(); }) })));
     if (!cloud.length) { box.append(el('p', { className: 'muted', textContent: 'No songs saved in your account yet.' })); return; }
+    box.append(el('p', { className: 'muted', textContent: app.user.handle
+      ? `Public songs are listed on your page (${location.host}/@${app.user.handle}) and in Explore.`
+      : 'Share a song by link, or choose a handle to get your own page with your public songs.' }));
     const tb = el('tbody');
     for (const s of cloud) {
       tb.append(el('tr', { className: app.serverSong?.id === s.id && !app.dirty ? 'current' : '' },
-        el('td', { className: 'name', textContent: s.name }),
+        el('td', { className: 'name' }, s.name, s.plays ? el('span', { className: 'muted plays', textContent: ` · ${s.plays} play${s.plays === 1 ? '' : 's'}` }) : ''),
         el('td', { textContent: s.format.toUpperCase() }),
         el('td', { textContent: fmtSize(s.size) }),
         el('td', { textContent: fmtDate(s.updated_at) }),
+        el('td', { className: 'sharing' }, sharing(s)),
         el('td', { className: 'acts' },
           el('button', { textContent: 'Open', onclick: run(() => openCloud(s.id)) }), ' ',
           el('button', { className: 'danger', textContent: 'Delete', onclick: run(() => removeCloud(s.id)) }))));
     }
     box.append(el('table', { className: 'songs-table' }, tb));
   }
+
+  /** Who can listen: Private / Anyone with the link / Public, and the link to copy. */
+  function sharing(s) {
+    const sel = el('select', { className: `vis-select vis-${s.visibility}`, ariaLabel: `Who can listen to ${s.name}`, title: 'Who can listen' },
+      el('option', { value: 'private', textContent: 'Private' }),
+      el('option', { value: 'link', textContent: 'Anyone with the link' }),
+      el('option', { value: 'public', textContent: 'Public' }));
+    sel.value = s.visibility;
+    sel.addEventListener('change', run(async () => {
+      const v = sel.value;
+      try {
+        Object.assign(s, await api.setSongSharing(s.id, { visibility: v }));
+      } catch (e) {
+        sel.value = s.visibility;
+        if (e.needsHandle) { app.askForHandle('song'); return; }
+        throw e;
+      }
+      sel.className = `vis-select vis-${s.visibility}`;
+      copy.hidden = s.visibility === 'private';
+      if (v === 'public') app.toast(`"${s.name}" is public: on your page and in Explore.`);
+      else if (v === 'link') app.toast(`Anyone with the link can listen to "${s.name}". Copy it with 🔗.`);
+    }));
+    const copy = el('button', { className: 'icon-text', textContent: '🔗', title: 'Copy the link', ariaLabel: `Copy the link to ${s.name}`, hidden: s.visibility === 'private',
+      onclick: async () => {
+        const link = `${location.origin}/s/${s.token}`;
+        try { await navigator.clipboard.writeText(link); app.toast('Link copied'); } catch { app.toast(link); }
+      } });
+    return el('span', { className: 'sharing-ctl' }, sel, copy);
+  }
+
+  // E.g. a handle was just chosen: the texts and what can be made public change.
+  app.onUserChange.push(() => { if (dialog.open) refresh(); });
 
   async function openDraft(id) {
     const d = await getDraft(id);

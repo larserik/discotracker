@@ -11,6 +11,7 @@ import { PatternEditor } from './ui/pattern-editor.js';
 import { initAuth } from './ui/auth.js';
 import { initSongsDialog } from './ui/songs-dialog.js';
 import { initPlaylists } from './ui/playlists.js';
+import { initExplore } from './ui/explore.js';
 import { idbGet, idbSet, local, newDraftId, putDraft, deleteDraft } from './storage.js';
 import { api } from './api.js';
 import { actionFor } from './keymap.js';
@@ -87,6 +88,7 @@ class App {
     this.songsDialog = initSongsDialog(this);
     this.playlists = initPlaylists(this);
     this.settings = initSettings(this);
+    this.explore = initExplore(this); // also opens links: /@handle, /explore, /p/…, /s/…
 
     const saved = await idbGet('autosave');
     let restored = false;
@@ -207,6 +209,16 @@ class App {
     $('#toasts').append(el);
     setTimeout(() => el.classList.add('hide'), type === 'error' ? 6000 : 3500);
     setTimeout(() => el.remove(), type === 'error' ? 6600 : 4100);
+  }
+
+  /** Making something public needs a handle (the page it is listed on). */
+  async askForHandle(what = 'song') {
+    if (!(await confirmDialog({
+      title: 'Choose a handle first',
+      message: `Public ${what}s are listed on your own page, like ${location.host}/@yourname, and in Explore. Pick a handle to get your page. Until then you can share by link.`,
+      confirmText: 'Choose a handle',
+    }))) return;
+    this.settings.open('profile');
   }
 
   setUser(user) {
@@ -1025,6 +1037,8 @@ class App {
       'save-cloud-new': () => this.saveCloud(true),
       'my-songs': () => this.songsDialog.open(),
       playlists: () => this.playlists.manager.open(),
+      explore: () => this.explore.open(),
+      'my-page': () => (this.user?.handle ? this.explore.openProfile(this.user.handle) : this.settings.open('profile')),
       'play-song': () => this.play('song'),
       'play-pattern': () => this.play('pattern'),
       stop: () => this.stop(),

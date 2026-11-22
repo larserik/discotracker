@@ -24,6 +24,7 @@ export function initAuth({ onUser, toast }) {
     $('#user-email').textContent = user?.email || '';
     $('#menu-email').textContent = user?.email || '';
     $('#account-btn').title = user ? `Signed in as ${user.email}` : '';
+    $('#menu-my-page').textContent = user?.handle ? `My page (@${user.handle})` : 'Choose a handle…';
     fitAccount();
     onUser(user);
   }
@@ -149,5 +150,6 @@ export function initAuth({ onUser, toast }) {
 
   api.me().then(({ user }) => showUser(user)).catch(() => showUser(null));
 
-  return { open };
+  /** The user changed (e.g. the profile was saved). */
+  return { open, update: showUser };
 }

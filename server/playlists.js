@@ -1,6 +1,6 @@
-import crypto from 'node:crypto';
 import express from 'express';
-import { db } from './db.js';
+import { db, newToken } from './db.js';
+import { VISIBILITIES, publicUser, countPlay } from './public.js';
 import { requireUser, normalizeEmail } from './auth.js';
 import { sendPlaylistInvite } from './mailer.js';
 import { publicBaseUrl } from './canonical.js';
@@ -11,7 +11,6 @@ const MAX_INVITES_PER_HOUR = 30; // per user, to keep the mail server from being
 const MAX_ITEMS = 500;
 
 const cleanText = (s, max) => String(s ?? '').replace(/[\x00-\x09\x0b-\x1f]/g, '').trim().slice(0, max);
-const newToken = () => crypto.randomBytes(12).toString('base64url');
 
 function ownPlaylist(req, res) {
   const p = db.prepare('SELECT * FROM playlists WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
@@ -51,7 +50,7 @@ function ownerView(p, req) {
 function access(p, user) {
   if (user && user.id === p.user_id) return 'owner';
   if (user && db.prepare('SELECT 1 FROM playlist_shares WHERE playlist_id = ? AND email = ?').get(p.id, user.email)) return 'shared';
-  if (p.visibility === 'public') return 'public';
+  if (p.visibility !== 'private') return 'public'; // 'link' or listed 'public'
   return null;
 }
 
@@ -98,12 +97,16 @@ playlistsRouter.put('/:id', (req, res) => {
   const b = req.body || {};
   const name = b.name !== undefined ? cleanText(b.name, 100) || p.name : p.name;
   const description = b.description !== undefined ? cleanText(b.description, 1000) : p.description;
-  const visibility = b.visibility === 'public' || b.visibility === 'private' ? b.visibility : p.visibility;
+  const visibility = VISIBILITIES.has(b.visibility) ? b.visibility : p.visibility;
+  if (visibility === 'public' && p.visibility !== 'public' && !db.prepare('SELECT handle FROM users WHERE id = ?').get(req.user.id).handle) {
+    return res.status(400).json({ error: 'Choose a handle first, so the playlist has a page to be listed on.', needsHandle: true });
+  }
+  const published = visibility === 'public' && p.visibility !== 'public' ? Date.now() : p.published_at;
 
   db.exec('BEGIN');
   try {
-    db.prepare('UPDATE playlists SET name = ?, description = ?, visibility = ?, updated_at = ? WHERE id = ?')
-      .run(name, description, visibility, Date.now(), p.id);
+    db.prepare('UPDATE playlists SET name = ?, description = ?, visibility = ?, published_at = ?, updated_at = ? WHERE id = ?')
+      .run(name, description, visibility, published, Date.now(), p.id);
     if (Array.isArray(b.songIds)) {
       const ids = [...new Set(b.songIds.map(Number).filter(Number.isInteger))].slice(0, MAX_ITEMS);
       // Only the owner's own songs can be put in a playlist.
@@ -168,7 +171,7 @@ playlistsRouter.post('/:id/shares', async (req, res) => {
   const failed = [];
   for (const e of fresh) {
     try {
-      await sendPlaylistInvite(e, { from: req.user.email, name: p.name, url, isPublic: p.visibility === 'public' });
+      await sendPlaylistInvite(e, { from: req.user.email, name: p.name, url, isPublic: p.visibility !== 'private' });
       db.prepare('UPDATE playlist_shares SET notified_at = ? WHERE playlist_id = ? AND email = ?').run(Date.now(), p.id, e);
     } catch (err) {
       console.error('[mail] playlist invite failed:', err.message);
@@ -218,10 +221,13 @@ sharedPlaylistRouter.get('/:token', (req, res) => {
     description: p.description,
     visibility: p.visibility,
     access: a,
-    // The owner's email is only shown to people it was explicitly shared with.
+    plays: p.plays,
+    // The owner's email is only shown to people it was explicitly shared with; others see the handle, if any.
     owner: a === 'shared' ? db.prepare('SELECT email FROM users WHERE id = ?').get(p.user_id).email : undefined,
+    by: publicUser(db.prepare('SELECT handle, display_name FROM users WHERE id = ?').get(p.user_id)),
     tracks: items(p.id),
   });
+  if (a !== 'owner') countPlay(req, 'playlists', p.id);
 });
 
 sharedPlaylistRouter.get('/:token/songs/:songId', (req, res) => {

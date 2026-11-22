@@ -1,7 +1,12 @@
 async function json(res) {
   let body = null;
   try { body = await res.json(); } catch { /* empty */ }
-  if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const e = new Error(body?.error || `Request failed (${res.status})`);
+    e.status = res.status;
+    e.needsHandle = !!body?.needsHandle;
+    throw e;
+  }
   return body;
 }
 
@@ -69,5 +74,23 @@ export const api = {
       data: await res.arrayBuffer(),
     };
   },
+  setSongSharing: (id, data) => send('PATCH', `/api/songs/${id}`, data),
+  // profile
+  checkHandle: (h) => fetch(`/api/profile/handle/${encodeURIComponent(h)}`, { credentials: 'same-origin' }).then(json),
+  saveProfile: (data) => send('PUT', '/api/profile', data),
+  // public: people, song links, explore
+  getProfile: (handle) => fetch(`/api/u/${encodeURIComponent(handle)}`, { credentials: 'same-origin' }).then(json),
+  getPublicSong: (token) => fetch(`/api/s/${encodeURIComponent(token)}`, { credentials: 'same-origin' }).then(json),
+  async getPublicSongData(token) {
+    const res = await fetch(`/api/s/${encodeURIComponent(token)}/data`, { credentials: 'same-origin' });
+    if (!res.ok) await json(res);
+    return {
+      name: decodeURIComponent(res.headers.get('X-Song-Name') || 'untitled'),
+      format: res.headers.get('X-Song-Format') || 'xm',
+      data: await res.arrayBuffer(),
+    };
+  },
+  explore: ({ type, q = '', sort = 'new', offset = 0 }) =>
+    fetch(`/api/explore?type=${type}&q=${encodeURIComponent(q)}&sort=${sort}&offset=${offset}`, { credentials: 'same-origin' }).then(json),
   deleteSong: (id) => fetch(`/api/songs/${id}`, { method: 'DELETE', credentials: 'same-origin' }).then(json),
 };

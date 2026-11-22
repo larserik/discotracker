@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { db } from './db.js';
 import { sendLoginCode } from './mailer.js';
+import { userView } from './public.js';
 
 const CODE_TTL = 10 * 60e3;
 const SESSION_TTL = 60 * 24 * 3600e3;
@@ -60,7 +61,7 @@ export function requireUser(req, res, next) {
 export const authRouter = express.Router();
 
 authRouter.get('/me', (req, res) => {
-  res.json({ user: req.user || null });
+  res.json({ user: req.user ? userView(req.user.id) : null });
 });
 
 authRouter.post('/request-code', async (req, res) => {
@@ -144,7 +145,7 @@ authRouter.post('/verify', (req, res) => {
     maxAge: SESSION_TTL,
     path: '/',
   });
-  res.json({ user: { id: user.id, email: user.email } });
+  res.json({ user: userView(user.id) });
 });
 
 authRouter.post('/logout', (req, res) => {
